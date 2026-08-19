@@ -10,14 +10,15 @@ export default async function NewProjectPage({ searchParams }: { searchParams: P
   const importId = typeof query.import === "string" ? query.import : "";
   const suggestedName = typeof query.name === "string" ? query.name : "";
   const suggestedCode = typeof query.code === "string" ? query.code : "";
-  const returnHref = importId ? `/statements/${importId}` : "/projects";
+  const suggestedClient = typeof query.client === "string" ? query.client : "";
+  const returnHref = importId ? `/statements/${importId}/projects${suggestedClient ? `?client=${encodeURIComponent(suggestedClient)}` : ""}` : "/projects";
 
   return (
     <main className="page-canvas">
       <div className="page-wrap" style={{ maxWidth: 980 }}>
         <div className="page-toolbar">
           <Link href="/" className="back-link">← Dashboard</Link>
-          <Link href={returnHref} className="secondary-link">{importId ? "Statement review" : "Projects"}</Link>
+          <Link href={returnHref} className="secondary-link">{importId ? "Project discovery" : "Projects"}</Link>
         </div>
 
         <header className="page-heading compact">
@@ -30,12 +31,14 @@ export default async function NewProjectPage({ searchParams }: { searchParams: P
           {candidateId && <input type="hidden" name="candidate_id" value={candidateId} />}
           {importId && <input type="hidden" name="import_id" value={importId} />}
 
+          {suggestedClient && <div style={{ background: "#edf8f3", border: "1px solid #bfe3d2", borderRadius: 10, padding: 10, color: "#126547", fontSize: 10 }}><b>Managed company/client:</b> {suggestedClient}. You can change it below before saving.</div>}
+
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(250px,.55fr)", gap: 14 }} className="new-project-top-grid">
             <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(205px,1fr))", gap: 11 }}>
               <label style={label}>Project code<input name="project_code" required defaultValue={suggestedCode} placeholder="e.g. JAHI-01" style={field} /></label>
               <label style={label}>Project name<input name="name" required defaultValue={suggestedName} placeholder="Project name" style={field} /></label>
               <label style={label}>Project type<input name="project_type" placeholder="Residential, fit-out, civil, MEP…" style={field} /></label>
-              <label style={label}>Client<input name="client_name" placeholder="Client/company name" style={field} /></label>
+              <label style={label}>Client / managed company<input name="client_name" defaultValue={suggestedClient} placeholder="Client/company name" style={field} /></label>
               <label style={label}>Location<input name="location" placeholder="Area / city" style={field} /></label>
               <label style={label}>Site address<input name="site_address" placeholder="Full site address" style={field} /></label>
               <label style={label}>Start date<input name="start_date" type="date" style={field} /></label>
@@ -67,7 +70,7 @@ export default async function NewProjectPage({ searchParams }: { searchParams: P
           <label style={label}>Project description<textarea name="description" rows={3} placeholder="Scope, building/use, key project information" style={field} /></label>
           <label style={label}>Internal notes<textarea name="notes" rows={3} placeholder="Optional internal notes" style={field} /></label>
 
-          {candidateId && <div style={{ background: "#fff8e8", border: "1px solid #f1d89c", borderRadius: 10, padding: 10, color: "#745313", fontSize: 10 }}>After creation, rows carrying this statement signal will be linked to the project for review. They will <b>not</b> be posted automatically.</div>}
+          {candidateId && <div style={{ background: "#fff8e8", border: "1px solid #f1d89c", borderRadius: 10, padding: 10, color: "#745313", fontSize: 10 }}>After creation, rows carrying this statement signal will be linked to the project. High-confidence project expenses can then be posted by the matching engine; ambiguous rows remain for your review.</div>}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
             <Link href={returnHref} className="secondary-button">Cancel</Link>
