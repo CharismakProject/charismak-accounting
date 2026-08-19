@@ -11,19 +11,44 @@ const money = (value: number | string | null | undefined) =>
 
 export default async function Home() {
   const supabase = await createClient();
-  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
-  if (authError || !user) redirect("/login");
+  if (!user) redirect("/login");
 
-  const { data: membership } = await supabase
+  const { data: membership, error: membershipError } = await supabase
     .from("company_memberships")
-    .select("id, company_id, is_owner, company:companies(name), positions:membership_positions(is_primary, position:positions(name, interface_family))")
+    .select("id, company_id, is_owner, status")
     .eq("user_id", user.id)
     .eq("status", "active")
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  if (!membership) redirect("/login?message=No+active+company+membership");
+  if (membershipError || !membership) {
+    await supabase.auth.signOut();
+    redirect("/login?message=Please+sign+in+with+your+company+account");
+  }
+
+  const { data: company } = await supabase
+    .from("companies")
+    .select("name")
+    .eq("id", membership.company_id)
+    .maybeSingle();
+
+  const { data: positionRows } = await supabase
+    .from("membership_positions")
+    .select("is_primary, position_id")
+    .eq("membership_id", membership.id);
+
+  const primaryPositionId = positionRows?.find((row) => row.is_primary)?.position_id ?? positionRows?.[0]?.position_id ?? null;
+  let roleName = membership.is_owner ? "MD / Owner" : "Member";
+  if (primaryPositionId) {
+    const { data: position } = await supabase
+      .from("positions")
+      .select("name")
+      .eq("id", primaryPositionId)
+      .maybeSingle();
+    if (position?.name) roleName = position.name;
+  }
 
   const { data: projects } = await supabase
     .from("projects")
@@ -59,12 +84,6 @@ export default async function Home() {
     { funding: 0, expenditure: 0, cash: 0, commitments: 0 },
   );
 
-  const companyRaw: any = (membership as any).company;
-  const company = Array.isArray(companyRaw) ? companyRaw[0] : companyRaw;
-  const positionRows: any[] = (membership as any).positions ?? [];
-  const primaryPosition = positionRows.find((row) => row.is_primary)?.position ?? positionRows[0]?.position;
-  const role = Array.isArray(primaryPosition) ? primaryPosition[0] : primaryPosition;
-
   return (
     <main style={{ minHeight: "100vh", background: "#f4f7fb", color: "#102942" }}>
       <div style={{ display: "grid", gridTemplateColumns: "220px minmax(0,1fr)", minHeight: "100vh" }}>
@@ -79,7 +98,7 @@ export default async function Home() {
 
           <div style={{ background: "#145dab", borderRadius: 12, padding: 12 }}>
             <small style={{ opacity: .75 }}>SIGNED IN AS</small>
-            <b style={{ display: "block", marginTop: 5 }}>{role?.name ?? "Member"}</b>
+            <b style={{ display: "block", marginTop: 5 }}>{roleName}</b>
             <span style={{ display: "block", fontSize: 11, opacity: .75, marginTop: 3 }}>{user.email}</span>
           </div>
 
@@ -88,6 +107,7 @@ export default async function Home() {
             <Link href="/projects" style={nav}>Projects</Link>
             <Link href="/statements" style={nav}>Transactions & Statements</Link>
             <Link href="/statements/upload" style={nav}>Upload Statement</Link>
+            <Link href="/login" style={nav}>Switch account / Sign in</Link>
           </nav>
 
           <div style={{ marginTop: "auto", fontSize: 10, opacity: .78 }}><b>✓ Track the truth</b><span style={{ display: "block" }}>Every movement. Every project.</span></div>
