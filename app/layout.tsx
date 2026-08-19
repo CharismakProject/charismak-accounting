@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./responsive.css";
 import "./statement-review.css";
+import "./project-workspace.css";
 
 export const dynamic = "force-dynamic";
 
