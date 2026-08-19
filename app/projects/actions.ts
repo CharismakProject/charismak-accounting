@@ -25,11 +25,11 @@ export async function createProject(formData:FormData){
   const expectedRevenue=numberOrNull(formData.get("expected_contract_revenue"))??contractValue??0,originalBudget=numberOrNull(formData.get("original_budget"))??internalBudget??0;
   const {error:summaryError}=await supabase.from("project_financial_summaries").insert({project_id:project.id,original_budget:originalBudget,revised_budget:originalBudget,expected_contract_revenue:expectedRevenue,forecast_final_cost:originalBudget,forecast_cost_to_complete:originalBudget,forecast_profit:expectedRevenue-originalBudget});if(summaryError)throw new Error(`Project created but financial summary failed: ${summaryError.message}`);
 
-  let autoPosted=0;
-  if(candidateId){const {error:candidateError}=await supabase.rpc("link_statement_candidate",{candidate_id:candidateId,target_project:project.id});if(candidateError)throw new Error(`Project created, but statement candidate linking failed: ${candidateError.message}`);if(importId){const {data:posting,error:postingError}=await supabase.rpc("auto_post_statement_matches",{target_import:importId,minimum_confidence:94});if(postingError)throw new Error(`Project created and rows linked, but automatic posting failed: ${postingError.message}`);autoPosted=Number(posting?.autoPosted??0);}}
+  let autoPosted=0;let reclassified=0;
+  if(candidateId){const {data:linked,error:candidateError}=await supabase.rpc("link_statement_candidate",{candidate_id:candidateId,target_project:project.id});if(candidateError)throw new Error(`Project created, but statement candidate linking failed: ${candidateError.message}`);reclassified=Number((linked as any)?.reclassified_rows??0);if(importId){const {data:posting,error:postingError}=await supabase.rpc("auto_post_statement_matches",{target_import:importId,minimum_confidence:94});if(postingError)throw new Error(`Project created and rows linked, but automatic posting failed: ${postingError.message}`);autoPosted=Number((posting as any)?.autoPosted??0);}}
 
   revalidatePath("/projects");revalidatePath("/");if(importId){revalidatePath(`/statements/${importId}`);revalidatePath(`/statements/${importId}/projects`);}
-  redirect(candidateId&&importId?`/statements/${importId}/projects?created=${encodeURIComponent(projectCode)}&autoposted=${autoPosted}${clientName?`&client=${encodeURIComponent(clientName)}`:""}`:`/projects/${project.id}`);
+  redirect(candidateId&&importId?`/statements/${importId}/projects?created=${encodeURIComponent(projectCode)}&reclassified=${reclassified}&autoposted=${autoPosted}${clientName?`&client=${encodeURIComponent(clientName)}`:""}`:`/projects/${project.id}`);
 }
 
 export async function updateProject(formData:FormData){
