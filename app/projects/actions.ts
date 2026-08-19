@@ -6,20 +6,20 @@ import { createClient } from "../../lib/supabase/server";
 
 async function getContext() {
   const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const userId = claimsData?.claims?.sub;
-  if (!userId) redirect("/login");
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const user = authData.user;
+  if (authError || !user) redirect("/login");
 
   const { data: membership, error } = await supabase
     .from("company_memberships")
     .select("id, company_id, is_owner")
-    .eq("user_id", userId)
+    .eq("user_id", user.id)
     .eq("status", "active")
     .limit(1)
     .single();
 
   if (error || !membership) redirect("/login?message=No+active+company+membership");
-  return { supabase, userId, membership };
+  return { supabase, userId: user.id, membership };
 }
 
 const numberOrNull = (value: FormDataEntryValue | null) => {
@@ -42,7 +42,7 @@ export async function createProject(formData: FormData) {
       )
       .select("id")
       .single();
-    if (clientError) throw new Error(clientError.message);
+    if (clientError) throw new Error(`Could not save client: ${clientError.message}`);
     clientId = client.id;
   }
 
@@ -73,17 +73,29 @@ export async function createProject(formData: FormData) {
     .select("id")
     .single();
 
-  if (error) throw new Error(error.message);
-  await supabase.from("project_financial_summaries").insert({ project_id: project.id });
+  if (error) throw new Error(`Could not create project: ${error.message}`);
+
+  const { error: summaryError } = await supabase
+    .from("project_financial_summaries")
+    .insert({ project_id: project.id });
+  if (summaryError) throw new Error(`Project created but financial summary failed: ${summaryError.message}`);
 
   revalidatePath("/projects");
   redirect(`/projects/${project.id}`);
 }
 
 export async function updateProject(formData: FormData) {
-  const { supabase, userId } = await getContext();
+  const { supabase, userId, membership } = await getContext();
   const projectId = String(formData.get("project_id") || "");
   if (!projectId) throw new Error("Project ID is required.");
+
+  const { data: ownedProject, error: ownedProjectError } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("company_id", membership.company_id)
+    .single();
+  if (ownedProjectError || !ownedProject) throw new Error("Project not found in your company workspace.");
 
   const { error: projectError } = await supabase
     .from("projects")
@@ -101,8 +113,9 @@ export async function updateProject(formData: FormData) {
       updated_by: userId,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", projectId);
-  if (projectError) throw new Error(projectError.message);
+    .eq("id", projectId)
+    .eq("company_id", membership.company_id);
+  if (projectError) throw new Error(`Could not update project: ${projectError.message}`);
 
   const funding = numberOrNull(formData.get("funding_received")) ?? 0;
   const expenditure = numberOrNull(formData.get("confirmed_expenditure")) ?? 0;
@@ -124,9 +137,10 @@ export async function updateProject(formData: FormData) {
       source_label: String(formData.get("source_label") || "").trim() || null,
       updated_at: new Date().toISOString(),
     });
-  if (summaryError) throw new Error(summaryError.message);
+  if (summaryError) throw new Error(`Project details saved but financial summary failed: ${summaryError.message}`);
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/projects");
+  revalidatePath("/");
   redirect(`/projects/${projectId}?saved=1`);
 }
