@@ -21,6 +21,7 @@ export default function DiscoverProjectsButton({ importId, compact = false }: { 
       }
       const { error: rpcError } = await supabase.rpc("discover_statement_projects", { target_import: importId });
       if (rpcError) throw new Error(rpcError.message);
+      router.push(`/statements/${importId}/projects`);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Project discovery failed.");
@@ -32,7 +33,7 @@ export default function DiscoverProjectsButton({ importId, compact = false }: { 
   return (
     <div style={{ display: "grid", gap: 6 }}>
       <button type="button" className={compact ? "secondary-button" : "primary-action compact-button"} onClick={discover} disabled={busy}>
-        {busy ? "Finding project signals…" : "Find projects & keywords"}
+        {busy ? "Finding project signals…" : compact ? "Manage project discovery" : "Find projects & keywords"}
       </button>
       {error && <small style={{ color: "#b42318", fontSize: 10 }}>{error}</small>}
     </div>
