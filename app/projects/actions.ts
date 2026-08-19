@@ -31,15 +31,14 @@ const numberOrNull = (value: FormDataEntryValue | null) => {
 export async function createProject(formData: FormData) {
   const { supabase, userId, membership } = await getContext();
   const clientName = String(formData.get("client_name") || "").trim();
+  const candidateId = String(formData.get("candidate_id") || "").trim();
+  const importId = String(formData.get("import_id") || "").trim();
   let clientId: string | null = null;
 
   if (clientName) {
     const { data: client, error: clientError } = await supabase
       .from("clients")
-      .upsert(
-        { company_id: membership.company_id, name: clientName },
-        { onConflict: "company_id,name" },
-      )
+      .upsert({ company_id: membership.company_id, name: clientName }, { onConflict: "company_id,name" })
       .select("id")
       .single();
     if (clientError) throw new Error(`Could not save client: ${clientError.message}`);
@@ -62,10 +61,7 @@ export async function createProject(formData: FormData) {
       start_date: String(formData.get("start_date") || "") || null,
       contract_value: numberOrNull(formData.get("contract_value")),
       internal_cost_budget: numberOrNull(formData.get("internal_cost_budget")),
-      aliases: String(formData.get("aliases") || "")
-        .split(",")
-        .map(v => v.trim())
-        .filter(Boolean),
+      aliases: String(formData.get("aliases") || "").split(",").map(v => v.trim()).filter(Boolean),
       notes: String(formData.get("notes") || "").trim() || null,
       created_by: userId,
       updated_by: userId,
@@ -75,13 +71,21 @@ export async function createProject(formData: FormData) {
 
   if (error) throw new Error(`Could not create project: ${error.message}`);
 
-  const { error: summaryError } = await supabase
-    .from("project_financial_summaries")
-    .insert({ project_id: project.id });
+  const { error: summaryError } = await supabase.from("project_financial_summaries").insert({ project_id: project.id });
   if (summaryError) throw new Error(`Project created but financial summary failed: ${summaryError.message}`);
 
+  if (candidateId) {
+    const { error: candidateError } = await supabase.rpc("link_statement_candidate", {
+      candidate_id: candidateId,
+      target_project: project.id,
+    });
+    if (candidateError) throw new Error(`Project created, but statement candidate linking failed: ${candidateError.message}`);
+  }
+
   revalidatePath("/projects");
-  redirect(`/projects/${project.id}`);
+  revalidatePath("/");
+  if (importId) revalidatePath(`/statements/${importId}`);
+  redirect(candidateId && importId ? `/statements/${importId}?candidate=created` : `/projects/${project.id}`);
 }
 
 export async function updateProject(formData: FormData) {
@@ -105,10 +109,7 @@ export async function updateProject(formData: FormData) {
       status: String(formData.get("status") || "active"),
       contract_value: numberOrNull(formData.get("contract_value")),
       internal_cost_budget: numberOrNull(formData.get("internal_cost_budget")),
-      aliases: String(formData.get("aliases") || "")
-        .split(",")
-        .map(v => v.trim())
-        .filter(Boolean),
+      aliases: String(formData.get("aliases") || "").split(",").map(v => v.trim()).filter(Boolean),
       notes: String(formData.get("notes") || "").trim() || null,
       updated_by: userId,
       updated_at: new Date().toISOString(),
