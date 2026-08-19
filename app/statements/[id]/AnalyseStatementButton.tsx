@@ -16,7 +16,7 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
   async function analyse() {
     setBusy(true);
     setError("");
-    setMessage("Authenticating and analysing the stored PDF…");
+    setMessage("Analysing statement transactions…");
 
     try {
       const supabase = createClient();
@@ -40,14 +40,16 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
       });
 
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result?.error || `Statement analyser returned ${response.status}.`);
-      }
+      if (!response.ok) throw new Error(result?.error || `Statement analyser returned ${response.status}.`);
 
-      setMessage(`Found ${result?.rows ?? 0} transaction row(s). Refreshing review…`);
+      setMessage(`Found ${result?.rows ?? 0} transaction row(s). Looking for existing and possible new projects…`);
+      const { error: discoveryError } = await supabase.rpc("discover_statement_projects", { target_import: importId });
+      if (discoveryError) throw new Error(`Transactions were extracted, but project discovery failed: ${discoveryError.message}`);
+
+      setMessage("Analysis complete. Project signals found are ready for your review.");
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "PDF analysis failed.");
+      setError(cause instanceof Error ? cause.message : "Statement analysis failed.");
       setMessage("");
     } finally {
       setBusy(false);
@@ -58,7 +60,7 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
     <div className="analyse-box">
       <div>
         <strong>Statement uploaded — analysis pending</strong>
-        <span>Extract transaction dates, debit/credit amounts, balances and references from the stored PDF.</span>
+        <span>Extract transactions, compare known movements, then identify existing and possible new projects.</span>
       </div>
       <button type="button" className="primary-action compact-button" disabled={busy} onClick={analyse}>
         {busy ? "Analysing…" : "Analyse statement"}
