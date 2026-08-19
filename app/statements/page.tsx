@@ -9,7 +9,7 @@ export default async function StatementsPage() {
 
   const { data: imports, error } = await supabase
     .from("statement_imports")
-    .select("id, detected_institution_name, detected_account_name, period_start, period_end, status, detected_as_new_account, rows_total, rows_new, rows_already_known, rows_need_review, overlapping_import_id, document:source_documents(file_name, uploaded_at)")
+    .select("id, detected_institution_name, detected_account_name, period_start, period_end, status, detected_as_new_account, rows_total, rows_new, rows_already_known, rows_need_review, rows_auto_posted, rows_pending_review, overlapping_import_id, document:source_documents(file_name, uploaded_at)")
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
 
@@ -40,27 +40,31 @@ export default async function StatementsPage() {
 
           {(imports ?? []).map((item: any) => {
             const document = Array.isArray(item.document) ? item.document[0] : item.document;
+            const pending = Number(item.rows_pending_review ?? item.rows_new ?? 0);
+            const posted = Number(item.rows_auto_posted ?? 0);
             return (
-              <Link href={`/statements/${item.id}`} key={item.id} style={{ textDecoration: "none", color: "inherit" }}>
-                <article className="compact-card">
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                    <div>
-                      <b style={{ fontSize: 14 }}>{item.detected_institution_name || "Bank"} · {item.detected_account_name || "Account"}</b>
-                      <p style={{ margin: "4px 0 0", color: "#7b8998", fontSize: 11 }}>{document?.file_name} · {item.period_start || "Period unknown"} → {item.period_end || "—"}</p>
+              <article className="compact-card" key={item.id}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <b style={{ fontSize: 14 }}>{item.detected_institution_name || "Bank"} · {item.detected_account_name || "Account"}</b>
+                    <p style={{ margin: "4px 0 0", color: "#7b8998", fontSize: 11 }}>{document?.file_name} · {item.period_start || "Period unknown"} → {item.period_end || "—"}</p>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: item.status === "confirmed" ? "#16825c" : "#9b6b05" }}>{String(item.status).replaceAll("_", " ")}</span>
+                </div>
+                <div className="statement-history-kpis">
+                  {[['Rows', item.rows_total], ['Auto-posted', posted], ['Needs action', pending], ['Already known', item.rows_already_known]].map(([label,value]) => (
+                    <div key={String(label)}>
+                      <small>{label}</small>
+                      <b>{Number(value || 0).toLocaleString()}</b>
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: item.status === "confirmed" ? "#16825c" : "#9b6b05" }}>{String(item.status).replaceAll("_", " ")}</span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 7, marginTop: 12 }}>
-                    {[['Rows', item.rows_total], ['New', item.rows_new], ['Already known', item.rows_already_known], ['Need review', item.rows_need_review]].map(([label,value]) => (
-                      <div key={String(label)} style={{ background: "#f8fafc", borderRadius: 9, padding: 9 }}>
-                        <small style={{ color: "#81909f", fontSize: 9 }}>{label}</small>
-                        <b style={{ display: "block", marginTop: 2, fontSize: 12 }}>{value}</b>
-                      </div>
-                    ))}
-                  </div>
-                  {(item.detected_as_new_account || item.overlapping_import_id) && <p style={{ margin: "9px 0 0", fontSize: 10, color: "#8a6616" }}>{item.detected_as_new_account ? "New financial account detected. " : ""}{item.overlapping_import_id ? "This statement overlaps a previous import." : ""}</p>}
-                </article>
-              </Link>
+                  ))}
+                </div>
+                {(item.detected_as_new_account || item.overlapping_import_id) && <p style={{ margin: "9px 0 0", fontSize: 10, color: "#8a6616" }}>{item.detected_as_new_account ? "New financial account detected. " : ""}{item.overlapping_import_id ? "This statement overlaps a previous import." : ""}</p>}
+                <div className="statement-history-actions">
+                  <Link href={`/statements/${item.id}`}>Open review</Link>
+                  {pending > 0 && <Link href={`/statements/${item.id}/bulk`}>Bulk review</Link>}
+                </div>
+              </article>
             );
           })}
         </section>
