@@ -16,13 +16,12 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
   async function analyse() {
     setBusy(true);
     setError("");
-    setMessage("Analysing statement transactions…");
+    setMessage("Extracting and comparing statement transactions…");
 
     try {
       const supabase = createClient();
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
-
       if (sessionError || !accessToken) {
         await supabase.auth.signOut();
         router.push("/login");
@@ -31,22 +30,23 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/analyse-statement`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          apikey: SUPABASE_PUBLISHABLE_KEY,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${accessToken}`, apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
         body: JSON.stringify({ importId }),
       });
-
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.error || `Statement analyser returned ${response.status}.`);
 
-      setMessage(`Found ${result?.rows ?? 0} transaction row(s). Looking for existing and possible new projects…`);
+      setMessage("Transactions extracted. Matching existing and possible new projects…");
       const { error: discoveryError } = await supabase.rpc("discover_statement_projects", { target_import: importId });
-      if (discoveryError) throw new Error(`Transactions were extracted, but project discovery failed: ${discoveryError.message}`);
+      if (discoveryError) throw new Error(`Project discovery failed: ${discoveryError.message}`);
 
-      setMessage("Analysis complete. Project signals found are ready for your review.");
+      setMessage("Project signals found. Posting unique high-confidence existing-project matches…");
+      const { data: posting, error: postingError } = await supabase.rpc("auto_post_statement_matches", { target_import: importId, minimum_confidence: 94 });
+      if (postingError) throw new Error(`Automatic posting failed: ${postingError.message}`);
+
+      const posted = Number(posting?.autoPosted ?? 0);
+      const pending = Number(posting?.pendingReview ?? 0);
+      setMessage(`Analysis complete: ${posted.toLocaleString()} transaction${posted === 1 ? "" : "s"} auto-posted; ${pending.toLocaleString()} left for review.`);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Statement analysis failed.");
@@ -56,17 +56,10 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
     }
   }
 
-  return (
-    <div className="analyse-box">
-      <div>
-        <strong>Statement uploaded — analysis pending</strong>
-        <span>Extract transactions, compare known movements, then identify existing and possible new projects.</span>
-      </div>
-      <button type="button" className="primary-action compact-button" disabled={busy} onClick={analyse}>
-        {busy ? "Analysing…" : "Analyse statement"}
-      </button>
-      {message && <small className="analyse-message">{message}</small>}
-      {error && <small className="analyse-error">{error}</small>}
-    </div>
-  );
+  return <div className="analyse-box">
+    <div><strong>Statement uploaded — analysis pending</strong><span>Extract transactions, detect projects, auto-post confident matches, then leave only unresolved rows for review.</span></div>
+    <button type="button" className="primary-action compact-button" disabled={busy} onClick={analyse}>{busy ? "Analysing…" : "Analyse statement"}</button>
+    {message && <small className="analyse-message">{message}</small>}
+    {error && <small className="analyse-error">{error}</small>}
+  </div>;
 }
