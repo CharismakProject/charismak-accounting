@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./responsive.css";
 
-// Authenticated accounting pages depend on live Supabase session/company data.
-// Force request-time rendering so Vercel does not evaluate those queries during build.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Charismak Accounting",
   description: "Construction accounting, cost control and treasury platform",
+  viewport: "width=device-width, initial-scale=1",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
