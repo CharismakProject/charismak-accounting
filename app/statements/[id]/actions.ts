@@ -6,6 +6,14 @@ import { createClient } from "../../../lib/supabase/server";
 
 const PROJECT_CLASSIFICATIONS=new Set(["project_expense","project_funding"]);
 
+function inferParty(counterparty:string|null|undefined,narration:string|null|undefined){
+  const direct=String(counterparty||"").trim();
+  if(direct)return direct;
+  const text=String(narration||"");
+  const match=text.match(/transfer\s+(?:to|from)\s+([^|]+)/i);
+  return match?.[1]?.trim()||"";
+}
+
 export async function confirmStatementTransaction(formData:FormData){
   const supabase=await createClient(); const {data:authData}=await supabase.auth.getUser(); const user=authData.user; if(!user)redirect("/login");
   const rowId=String(formData.get("statement_row_id")||""); const importId=String(formData.get("import_id")||""); const classification=String(formData.get("classification")||"unknown"); const projectId=String(formData.get("project_id")||"")||null; const categoryName=String(formData.get("category_name")||"").trim()||null;
@@ -34,7 +42,21 @@ export async function confirmStatementTransaction(formData:FormData){
   const {error:linkError}=await supabase.from("statement_row_transaction_links").insert({statement_row_id:rowId,canonical_transaction_id:transaction.id,confidence:100,reason:{matched_by:"user_confirmation",classification},is_primary:true});
   if(linkError)throw new Error(linkError.message);
 
-  if(PROJECT_CLASSIFICATIONS.has(classification)&&projectId){const {error:refreshError}=await supabase.rpc("refresh_project_financial_summary",{target_project:projectId});if(refreshError)throw new Error(refreshError.message);revalidatePath(`/projects/${projectId}`);revalidatePath("/projects");}
+  if(PROJECT_CLASSIFICATIONS.has(classification)&&projectId){
+    const party=inferParty(row.counterparty,row.narration);
+    if(party){
+      await supabase.rpc("learn_project_relationship",{
+        target_project:projectId,
+        party_name:party,
+        relationship_kind:classification==="project_funding"?"sponsor":"vendor",
+        classification_hint:classification,
+        category_hint:classification==="project_expense"?(categoryName||"Uncategorised"):null,
+        source_label:"confirmed_statement_transaction",
+        learned_transaction:transaction.id,
+      });
+    }
+    const {error:refreshError}=await supabase.rpc("refresh_project_financial_summary",{target_project:projectId});if(refreshError)throw new Error(refreshError.message);revalidatePath(`/projects/${projectId}`);revalidatePath("/projects");
+  }
 
   await supabase.from("statement_imports").update({rows_pending_review:Math.max(Number(statement.rows_pending_review??0)-1,0),updated_at:now}).eq("id",importId);
   revalidatePath(`/statements/${importId}`); revalidatePath("/statements"); revalidatePath("/");
