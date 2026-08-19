@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -33,7 +34,10 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: {
+          data: { full_name: fullName },
+          emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/login` : undefined,
+        },
       });
       if (error) {
         setMessage(error.message);
@@ -46,6 +50,25 @@ export default function LoginPage() {
       }
     }
     setBusy(false);
+  }
+
+  async function resendConfirmation() {
+    if (!email) {
+      setMessage("Enter your email address first, then click resend confirmation.");
+      return;
+    }
+    setResending(true);
+    setMessage("");
+    const supabase = createClient();
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: {
+        emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/login` : undefined,
+      },
+    });
+    setMessage(error ? error.message : "Confirmation email sent again. Check Inbox, Spam/Junk and Promotions.");
+    setResending(false);
   }
 
   return (
@@ -75,6 +98,11 @@ export default function LoginPage() {
           <label style={{ display: "grid", gap: 6, fontSize: 12, fontWeight: 700 }}>Password<input required minLength={8} type="password" value={password} onChange={e => setPassword(e.target.value)} style={inputStyle} /></label>
           {message && <p style={{ margin: 0, padding: 11, borderRadius: 10, background: "#fff5df", color: "#8d6005", fontSize: 12 }}>{message}</p>}
           <button disabled={busy} type="submit" style={{ border: 0, borderRadius: 12, padding: 13, background: "#0b3253", color: "white", fontWeight: 850 }}>{busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
+          {mode === "login" && (
+            <button type="button" disabled={resending} onClick={resendConfirmation} style={{ border: "1px solid #cfd9e3", borderRadius: 12, padding: 11, background: "white", color: "#0b3253", fontWeight: 800 }}>
+              {resending ? "Resending…" : "Resend confirmation email"}
+            </button>
+          )}
         </form>
       </section>
     </main>
