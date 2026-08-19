@@ -40,6 +40,8 @@ export default function MobileMenu() {
 
   useEffect(() => setOpen(false), [pathname]);
 
+  if (pathname.startsWith("/login") || pathname.startsWith("/auth")) return null;
+
   const items = owner
     ? [...baseItems, ["People & Access", "/admin/access"] as const, ["Audit trail", "/audit"] as const]
     : baseItems;
