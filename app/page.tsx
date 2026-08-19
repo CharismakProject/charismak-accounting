@@ -1,38 +1,162 @@
-"use client";
-
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { redirect } from "next/navigation";
+import { createClient } from "../lib/supabase/server";
 
-type RoleKey = "md" | "finance" | "director" | "manager";
+const LOGO_URL = "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png";
 
-const roles: Record<RoleKey, { label: string; short: string; accent: string; eyebrow: string; title: string; subtitle: string; nav: { label: string; href?: string }[] }> = {
-  md: {
-    label: "MD / Owner", short: "MD", accent: "blue", eyebrow: "Executive Overview", title: "Company Control Room",
-    subtitle: "Financial position, portfolio risk, profitability and decisions that need your attention.",
-    nav: [{label:"Executive"},{label:"Projects",href:"/projects"},{label:"Treasury",href:"/statements"},{label:"Approvals"},{label:"Reports"},{label:"Company"}],
-  },
-  finance: {
-    label: "Accountant / CFO", short: "CFO", accent: "green", eyebrow: "Finance Operations", title: "Finance Operations Hub",
-    subtitle: "Transactions, treasury, reconciliation, payments, evidence and financial control.",
-    nav: [{label:"Finance Home"},{label:"Transaction Inbox",href:"/statements"},{label:"Banking",href:"/statements"},{label:"Reconciliation",href:"/statements"},{label:"Payments"},{label:"Imprest"},{label:"Reports"}],
-  },
-  director: {
-    label: "Project Director", short: "PD", accent: "purple", eyebrow: "Project Portfolio", title: "Portfolio & Cost Control",
-    subtitle: "Compare projects, forecast margins, commitments, funding gaps and delivery risk.",
-    nav: [{label:"Portfolio"},{label:"Cost Control",href:"/projects"},{label:"Commitments"},{label:"Variations"},{label:"Approvals"},{label:"Reports"}],
-  },
-  manager: {
-    label: "Project / Construction Manager", short: "PM", accent: "orange", eyebrow: "Site & Project Control", title: "Jahi Residential",
-    subtitle: "Your site financial workspace for requests, spending, imprest, evidence and progress.",
-    nav: [{label:"My Project",href:"/projects"},{label:"Site Activities"},{label:"Expenses",href:"/statements"},{label:"Requests"},{label:"Imprest"},{label:"Materials"},{label:"Reports"}],
-  },
-};
+const money = (value: number | string | null | undefined) =>
+  value === null || value === undefined
+    ? "—"
+    : new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(Number(value));
 
-const kpi=(t:string,v:string,m:string)=><article className="kpi" key={t}><span>{t}</span><strong>{v}</strong><small>{m}</small></article>;
-function LineChart({tone="blue"}:{tone?:string}){return <div className={`chart ${tone}`}><svg viewBox="0 0 700 220" preserveAspectRatio="none" aria-hidden="true"><path className="chart-main" d="M20 190 C80 180 100 140 160 150 S250 110 310 120 S400 78 465 90 S565 48 680 60"/><path className="chart-alt" d="M20 205 C90 195 120 170 175 178 S270 145 330 151 S425 123 485 132 S585 95 680 105"/></svg></div>}
-function MDView(){return <><section className="kpi-grid five">{kpi("Total cash","₦245.6m","Portfolio placeholder")}{kpi("Project cash position","₦512.8m","Portfolio placeholder")}{kpi("Outstanding receivables","₦328.2m","Portfolio placeholder")}{kpi("Outstanding commitments","₦267.5m","Portfolio placeholder")}{kpi("Forecast profit","₦183.4m","Portfolio placeholder")}</section><section className="split wide"><article className="panel"><header><small>Company</small><h2>Cash Flow Overview</h2></header><LineChart/></article><article className="panel"><header><small>Portfolio</small><h2>Project Profitability</h2></header><div className="donut-wrap"><div className="donut blue"><div><strong>72%</strong><span>healthy margin</span></div></div></div></article></section><section className="split"><article className="panel"><header><small>Real test project</small><h2>Jahi Residential</h2></header><div className="list-row"><div><b>Funding received</b><span>Retirement baseline</span></div><strong>₦12.60m</strong></div><div className="list-row"><div><b>Confirmed expenditure</b><span>Retirement baseline</span></div><strong>₦12.36m</strong></div><div className="list-row"><div><b>Outstanding commitments</b><span>Retirement baseline</span></div><strong>₦950k</strong></div><Link href="/projects" style={{display:"inline-block",marginTop:12,fontWeight:800,color:"#0b3253"}}>Open real projects →</Link></article><article className="panel"><header><small>Portfolio</small><h2>Funding vs Expenditure</h2></header><LineChart/></article></section></>}
-function FinanceView(){return <><section className="hero green"><div><small>Statement workflow</small><h2>Monthly transaction review</h2><p>Upload statements, detect duplicates and classify only new or unresolved movements.</p></div><div className="hero-actions"><Link href="/statements/upload" style={{color:"white",textDecoration:"none",fontWeight:800}}>Upload statement</Link><Link href="/statements" style={{color:"white",textDecoration:"none",fontWeight:800}}>Review imports</Link></div></section><section className="kpi-grid four finance-kpis">{kpi("Unclassified transactions","—","Uses live statement imports")}{kpi("Payments in queue","—","Not implemented yet")}{kpi("Receipts to record","—","Not implemented yet")}{kpi("Overdue imprest","—","Not implemented yet")}</section><section className="split wide"><article className="panel"><header><small>Transaction Inbox</small><h2>Use the live statement review</h2></header><p style={{color:"#718195"}}>Statement rows can now be classified as project expense, project funding, company expense/income, personal/non-business, internal transfer or left for further review.</p><Link href="/statements" style={{fontWeight:800,color:"#0b3253"}}>Open transaction inbox →</Link></article><article className="panel"><header><small>Jahi rule</small><h2>Baseline-safe posting</h2></header><p style={{color:"#718195"}}>Rows inside the existing Jahi retirement period are reconciled as historical evidence without changing the retirement totals. Later confirmed rows can update Jahi.</p></article></section></>}
-function DirectorView(){return <><section className="kpi-grid four director-kpis">{kpi("Projects under supervision","1","Jahi is the current real test project")}{kpi("Budget used","—","Awaiting internal budget baseline")}{kpi("Forecast margin","—","Awaiting contract/internal budget")}{kpi("Pending requests","—","Approvals module next")}</section><article className="panel"><header><small>Portfolio</small><h2>Real project workspace</h2></header><p style={{color:"#718195"}}>Open Projects to see Jahi using the retirement baseline and any later confirmed bank-statement movements.</p><Link href="/projects" style={{fontWeight:800,color:"#0b3253"}}>Open Projects →</Link></article></>}
-function ManagerView(){return <><section className="hero orange"><div><small className="tag">JAHI-01</small><h2>Jahi Residential</h2><p>Current real project test workspace.</p><span>Jahi, Abuja · retirement baseline through 07 Jul 2026</span></div><div className="imprest"><small>Funding position after commitments</small><strong>-₦707,117.40</strong><span>Based on retirement baseline</span></div></section><section className="quick-actions"><Link href="/projects" style={{textDecoration:"none",color:"inherit"}}><i>J</i><span><b>Open Jahi</b><small>Project financial workspace</small></span></Link><Link href="/statements/upload" style={{textDecoration:"none",color:"inherit"}}><i>+</i><span><b>Upload Statement</b><small>Add monthly bank data</small></span></Link><Link href="/statements" style={{textDecoration:"none",color:"inherit"}}><i>✓</i><span><b>Review Transactions</b><small>Confirm classifications</small></span></Link></section></>}
+export default async function Home() {
+  const supabase = await createClient();
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  const user = authData.user;
+  if (authError || !user) redirect("/login");
 
-export default function Home(){const[current,setCurrent]=useState<RoleKey>("md");const role=roles[current];const content=useMemo(()=>current==="md"?<MDView/>:current==="finance"?<FinanceView/>:current==="director"?<DirectorView/>:<ManagerView/>,[current]);return <main className={`app role-${role.accent}`}><aside className="sidebar"><div className="app-mark" aria-label="Charismak Accounting"><div className="logo-circle"><img src="https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png" alt="Charismak"/><b>A</b></div><span>Accounting</span></div><p className="section-label">Switch role</p><div className="role-list">{(Object.keys(roles) as RoleKey[]).map(key=><button key={key} className={`role-button ${key===current?"active":""}`} onClick={()=>setCurrent(key)}><span className="role-icon">{roles[key].short}</span><span><b>{roles[key].label}</b><small>{roles[key].eyebrow}</small></span></button>)}</div><nav>{role.nav.map((item,index)=>item.href?<Link className={index===0?"active":""} href={item.href} key={item.label}>{item.label}</Link>:<button className={index===0?"active":""} key={item.label}>{item.label}</button>)}</nav><div className="truth"><b>✓ Track the truth</b><span>Every movement. Every project.</span></div></aside><section className="content-shell"><header className="topbar"><div><small className="eyebrow">{role.eyebrow}</small><h1>{role.title}</h1><p>{role.subtitle}</p></div><div className="profile"><span>🔔</span><div>CA</div></div></header><div className="mobile-role-tabs">{(Object.keys(roles) as RoleKey[]).map(key=><button key={key} className={key===current?"active":""} onClick={()=>setCurrent(key)}>{roles[key].short}</button>)}</div><div className="dashboard">{content}</div></section></main>}
+  const { data: membership } = await supabase
+    .from("company_memberships")
+    .select("id, company_id, is_owner, company:companies(name), positions:membership_positions(is_primary, position:positions(name, interface_family))")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .limit(1)
+    .single();
+
+  if (!membership) redirect("/login?message=No+active+company+membership");
+
+  const { data: projects } = await supabase
+    .from("projects")
+    .select("id, project_code, name, location, status, summary:project_financial_summaries(funding_received, confirmed_expenditure, cash_balance, outstanding_commitments, funding_surplus_shortfall, reporting_period_end)")
+    .eq("company_id", membership.company_id)
+    .neq("status", "archived")
+    .order("created_at", { ascending: false });
+
+  const { count: statementCount } = await supabase
+    .from("statement_imports")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", membership.company_id);
+
+  const { count: transactionCount } = await supabase
+    .from("canonical_transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", membership.company_id);
+
+  const rows = (projects ?? []).map((project: any) => ({
+    ...project,
+    summary: Array.isArray(project.summary) ? project.summary[0] : project.summary,
+  }));
+
+  const totals = rows.reduce(
+    (acc, project) => {
+      const s = project.summary;
+      acc.funding += Number(s?.funding_received ?? 0);
+      acc.expenditure += Number(s?.confirmed_expenditure ?? 0);
+      acc.cash += Number(s?.cash_balance ?? 0);
+      acc.commitments += Number(s?.outstanding_commitments ?? 0);
+      return acc;
+    },
+    { funding: 0, expenditure: 0, cash: 0, commitments: 0 },
+  );
+
+  const companyRaw: any = (membership as any).company;
+  const company = Array.isArray(companyRaw) ? companyRaw[0] : companyRaw;
+  const positionRows: any[] = (membership as any).positions ?? [];
+  const primaryPosition = positionRows.find((row) => row.is_primary)?.position ?? positionRows[0]?.position;
+  const role = Array.isArray(primaryPosition) ? primaryPosition[0] : primaryPosition;
+
+  return (
+    <main style={{ minHeight: "100vh", background: "#f4f7fb", color: "#102942" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "220px minmax(0,1fr)", minHeight: "100vh" }}>
+        <aside style={{ background: "#082945", color: "white", padding: "18px 14px", display: "flex", flexDirection: "column", gap: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,.12)" }}>
+            <div style={{ width: 48, height: 48, borderRadius: "50%", background: "white", position: "relative", display: "grid", placeItems: "center" }}>
+              <img src={LOGO_URL} alt="Charismak" style={{ width: 43, height: 43, objectFit: "contain" }} />
+              <b style={{ position: "absolute", right: -2, bottom: -2, width: 18, height: 18, borderRadius: "50%", background: "#1f6fe5", color: "white", fontSize: 10, display: "grid", placeItems: "center", border: "2px solid white" }}>A</b>
+            </div>
+            <div><b style={{ fontSize: 13 }}>ACCOUNTING</b><small style={{ display: "block", opacity: .65, marginTop: 3 }}>{company?.name ?? "Company"}</small></div>
+          </div>
+
+          <div style={{ background: "#145dab", borderRadius: 12, padding: 12 }}>
+            <small style={{ opacity: .75 }}>SIGNED IN AS</small>
+            <b style={{ display: "block", marginTop: 5 }}>{role?.name ?? "Member"}</b>
+            <span style={{ display: "block", fontSize: 11, opacity: .75, marginTop: 3 }}>{user.email}</span>
+          </div>
+
+          <nav style={{ display: "grid", gap: 5 }}>
+            <Link href="/" style={activeNav}>Executive</Link>
+            <Link href="/projects" style={nav}>Projects</Link>
+            <Link href="/statements" style={nav}>Transactions & Statements</Link>
+            <Link href="/statements/upload" style={nav}>Upload Statement</Link>
+          </nav>
+
+          <div style={{ marginTop: "auto", fontSize: 10, opacity: .78 }}><b>✓ Track the truth</b><span style={{ display: "block" }}>Every movement. Every project.</span></div>
+        </aside>
+
+        <section>
+          <header style={{ background: "white", borderBottom: "1px solid #dfe7ee", padding: "22px 28px" }}>
+            <small style={{ color: "#1f6fe5", fontWeight: 900, textTransform: "uppercase", letterSpacing: ".12em" }}>Live Executive Overview</small>
+            <h1 style={{ margin: "5px 0", fontSize: 30 }}>Company Control Room</h1>
+            <p style={{ margin: 0, color: "#738397" }}>Only data currently stored in Charismak Accounting is shown here.</p>
+          </header>
+
+          <div style={{ padding: 22, display: "grid", gap: 16 }}>
+            <section style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 12 }}>
+              <Kpi label="Project funding recorded" value={money(totals.funding)} note={`${rows.length} active/draft project(s)`} />
+              <Kpi label="Confirmed project expenditure" value={money(totals.expenditure)} note="From stored project records" />
+              <Kpi label="Current project cash balance" value={money(totals.cash)} note="Funding less confirmed expenditure" />
+              <Kpi label="Outstanding commitments" value={money(totals.commitments)} note="Recorded commitments" />
+            </section>
+
+            <section style={{ display: "grid", gridTemplateColumns: "1.4fr .6fr", gap: 14 }}>
+              <article style={panel}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div><small style={eyebrow}>Projects</small><h2 style={{ margin: "4px 0" }}>Live Project Accounts</h2></div>
+                  <Link href="/projects" style={linkButton}>Open Projects</Link>
+                </div>
+                {rows.length === 0 ? <p style={{ color: "#748597" }}>No projects yet.</p> : rows.map((project: any) => (
+                  <Link href={`/projects/${project.id}`} key={project.id} style={{ textDecoration: "none", color: "inherit", display: "grid", gridTemplateColumns: "1.4fr repeat(4,.8fr)", gap: 10, padding: "12px 0", borderBottom: "1px solid #edf1f4", alignItems: "center" }}>
+                    <div><b>{project.project_code} · {project.name}</b><small style={{ display: "block", color: "#8493a2", marginTop: 3 }}>{project.location ?? "No location"}</small></div>
+                    <Metric label="Funding" value={money(project.summary?.funding_received)} />
+                    <Metric label="Spent" value={money(project.summary?.confirmed_expenditure)} />
+                    <Metric label="Commitments" value={money(project.summary?.outstanding_commitments)} />
+                    <Metric label="Position" value={money(project.summary?.funding_surplus_shortfall)} />
+                  </Link>
+                ))}
+              </article>
+
+              <article style={panel}>
+                <small style={eyebrow}>System Activity</small>
+                <h2 style={{ margin: "4px 0 16px" }}>What is actually in the app</h2>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <Stat label="Statement imports" value={String(statementCount ?? 0)} />
+                  <Stat label="Canonical transactions" value={String(transactionCount ?? 0)} />
+                  <Stat label="Projects" value={String(rows.length)} />
+                </div>
+                <Link href="/statements/upload" style={{ ...linkButton, display: "block", textAlign: "center", marginTop: 16 }}>Upload a Bank Statement</Link>
+              </article>
+            </section>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function Kpi({ label, value, note }: { label: string; value: string; note: string }) {
+  return <article style={panel}><small style={{ color: "#7b8b9a" }}>{label}</small><strong style={{ display: "block", fontSize: 23, margin: "8px 0 4px" }}>{value}</strong><span style={{ color: "#8a99a8", fontSize: 11 }}>{note}</span></article>;
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return <div><small style={{ color: "#8795a3" }}>{label}</small><b style={{ display: "block", marginTop: 3 }}>{value}</b></div>;
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return <div style={{ display: "flex", justifyContent: "space-between", padding: "11px 0", borderBottom: "1px solid #edf1f4" }}><span>{label}</span><b>{value}</b></div>;
+}
+
+const panel = { background: "white", border: "1px solid #dde6ee", borderRadius: 15, padding: 17 } as const;
+const eyebrow = { color: "#6f8090", fontWeight: 900, textTransform: "uppercase" as const, letterSpacing: ".11em" };
+const nav = { color: "#dce8f3", textDecoration: "none", padding: "10px 11px", borderRadius: 8, fontWeight: 700 } as const;
+const activeNav = { ...nav, color: "#082945", background: "white" } as const;
+const linkButton = { color: "white", background: "#0b4f82", padding: "9px 12px", borderRadius: 9, textDecoration: "none", fontWeight: 800, fontSize: 12 } as const;
