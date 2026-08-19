@@ -7,6 +7,7 @@ import "./app-enhancements.css";
 import "./role-dashboard.css";
 import "./operations.css";
 import PwaRegister from "./PwaRegister";
+import NotificationBell from "./NotificationBell";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en">
       <body>
         <PwaRegister />
+        <NotificationBell />
         {children}
       </body>
     </html>
