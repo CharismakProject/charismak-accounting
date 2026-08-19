@@ -1,5 +1,6 @@
-const CACHE = "charismak-accounting-static-v1";
-const STATIC_DESTINATIONS = new Set(["style", "script", "image", "font"]);
+const CACHE = "charismak-accounting-static-v2";
+const CACHE_FIRST = new Set(["image", "font"]);
+const NETWORK_FIRST = new Set(["style", "script"]);
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -15,8 +16,24 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (!STATIC_DESTINATIONS.has(request.destination)) return;
 
+  if (NETWORK_FIRST.has(request.destination)) {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(request);
+        if (fresh.ok) {
+          const cache = await caches.open(CACHE);
+          cache.put(request, fresh.clone());
+        }
+        return fresh;
+      } catch {
+        return (await caches.match(request)) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  if (!CACHE_FIRST.has(request.destination)) return;
   event.respondWith((async () => {
     const cached = await caches.match(request);
     if (cached) return cached;
