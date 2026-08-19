@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 
+const LOGO_URL = "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png";
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -24,7 +26,7 @@ export default function LoginPage() {
       if (error) {
         setMessage(error.message);
       } else {
-        router.push("/projects");
+        router.push("/");
         router.refresh();
       }
     } else {
@@ -39,7 +41,7 @@ export default function LoginPage() {
         setMessage("Account created. Check your email to confirm the account, then return here to sign in.");
         setMode("login");
       } else {
-        router.push("/projects");
+        router.push("/");
         router.refresh();
       }
     }
@@ -50,16 +52,21 @@ export default function LoginPage() {
     <main style={{ minHeight: "100vh", background: "#f4f7fb", display: "grid", placeItems: "center", padding: 24 }}>
       <section style={{ width: "min(460px,100%)", background: "white", border: "1px solid #e1e8ef", borderRadius: 22, padding: 30, boxShadow: "0 20px 60px rgba(15,36,58,.10)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24 }}>
-          <div style={{ width: 54, height: 54, borderRadius: "50%", background: "white", border: "1px solid #dce4ec", display: "grid", placeItems: "center", position: "relative" }}>
-            <span style={{ fontSize: 22, fontWeight: 900, color: "#0b3253" }}>C</span>
-            <b style={{ position: "absolute", right: -2, bottom: -2, width: 20, height: 20, borderRadius: "50%", background: "#0b3253", color: "white", fontSize: 11, display: "grid", placeItems: "center" }}>A</b>
+          <div style={{ width: 56, height: 56, borderRadius: "50%", background: "white", border: "1px solid #dce4ec", display: "grid", placeItems: "center", position: "relative", overflow: "visible" }}>
+            <div style={{ width: 48, height: 48, borderRadius: "50%", overflow: "hidden", background: "white", display: "grid", placeItems: "center" }}>
+              <img src={LOGO_URL} alt="Charismak" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            </div>
+            <b style={{ position: "absolute", right: -2, bottom: -2, width: 21, height: 21, borderRadius: "50%", background: "#0b3253", color: "white", fontSize: 11, display: "grid", placeItems: "center", border: "2px solid white" }}>A</b>
           </div>
-          <div><h1 style={{ margin: 0, fontSize: 25, color: "#102942" }}>Charismak Accounting</h1><p style={{ margin: "4px 0 0", color: "#728296", fontSize: 13 }}>Track the truth. Every movement. Every project.</p></div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 25, color: "#102942" }}>Charismak Accounting</h1>
+            <p style={{ margin: "4px 0 0", color: "#728296", fontSize: 13 }}>Track the truth. Every movement. Every project.</p>
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "#f3f6f9", padding: 4, borderRadius: 12, marginBottom: 22 }}>
-          <button onClick={() => setMode("login")} style={{ border: 0, borderRadius: 9, padding: 10, background: mode === "login" ? "white" : "transparent", fontWeight: 800 }}>Sign in</button>
-          <button onClick={() => setMode("signup")} style={{ border: 0, borderRadius: 9, padding: 10, background: mode === "signup" ? "white" : "transparent", fontWeight: 800 }}>Create account</button>
+          <button onClick={() => { setMode("login"); setMessage(""); }} style={{ border: 0, borderRadius: 9, padding: 10, background: mode === "login" ? "white" : "transparent", fontWeight: 800 }}>Sign in</button>
+          <button onClick={() => { setMode("signup"); setMessage(""); }} style={{ border: 0, borderRadius: 9, padding: 10, background: mode === "signup" ? "white" : "transparent", fontWeight: 800 }}>Create account</button>
         </div>
 
         <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
