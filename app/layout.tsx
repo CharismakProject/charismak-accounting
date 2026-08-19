@@ -7,8 +7,10 @@ import "./app-enhancements.css";
 import "./role-dashboard.css";
 import "./operations.css";
 import "./workflow-enhancements.css";
+import "./mobile-menu.css";
 import PwaRegister from "./PwaRegister";
 import NotificationBell from "./NotificationBell";
+import MobileMenu from "./MobileMenu";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <PwaRegister />
         <NotificationBell />
+        <MobileMenu />
         {children}
       </body>
     </html>
