@@ -3,6 +3,7 @@ import "./globals.css";
 import "./responsive.css";
 import "./statement-review.css";
 import "./project-workspace.css";
+import "./app-enhancements.css";
 
 export const dynamic = "force-dynamic";
 
