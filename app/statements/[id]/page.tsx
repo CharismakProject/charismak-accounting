@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
 import { confirmStatementTransaction } from "./actions";
-import { ignoreCandidate, linkCandidateToProject } from "./candidate-actions";
 import AnalyseStatementButton from "./AnalyseStatementButton";
 import DiscoverProjectsButton from "./DiscoverProjectsButton";
 
@@ -10,7 +9,6 @@ const money=(value:number|string|null|undefined)=>value==null?"—":new Intl.Num
 const classifications=[["project_expense","Project expense"],["project_funding","Project funding / advance"],["company_expense","Company expense"],["company_income","Company income"],["personal_non_business","Personal / non-business"],["internal_transfer","Internal transfer"],["unknown","Needs further review"]] as const;
 const categoryOptions=["Masonry","Temporary Works","Ceiling","Tiling","Skirting","Clearing","Cement","Plumbing","Site Operations","Site Materials","Labour","Transport","Other"];
 const PAGE_SIZE=50;
-
 type ReviewView="review"|"posted"|"known";
 
 export default async function StatementReviewPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<Record<string,string|string[]|undefined>>}){
@@ -37,27 +35,29 @@ export default async function StatementReviewPage({params,searchParams}:{params:
 
   const {data:projects}=await supabase.from("projects").select("id,project_code,name").eq("company_id",statement.company_id).in("status",["draft","active","on_hold"]).order("name");
   const {data:discoveryRaw}=Number((statement as any).rows_total??0)>0?await supabase.rpc("statement_project_discovery_summary",{target_import:id}):{data:null} as any;
-  const discovery:any=discoveryRaw??{existing_projects:[],candidates:[]}; const existingProjects:any[]=Array.isArray(discovery.existing_projects)?discovery.existing_projects:[]; const candidates:any[]=Array.isArray(discovery.candidates)?discovery.candidates:[];
+  const discovery:any=discoveryRaw??{existing_projects:[],candidates:[]};
+  const existingProjects:any[]=Array.isArray(discovery.existing_projects)?discovery.existing_projects:[];
+  const candidates:any[]=Array.isArray(discovery.candidates)?discovery.candidates:[];
   const document=Array.isArray((statement as any).document)?(statement as any).document[0]:(statement as any).document;
-  const duplicateNotice=query.duplicate==="1"; const confirmation=typeof query.confirmed==="string"?query.confirmed:undefined; const candidateNotice=typeof query.candidate==="string"?query.candidate:undefined;
+  const duplicateNotice=query.duplicate==="1"; const confirmation=typeof query.confirmed==="string"?query.confirmed:undefined;
   const showAnalyse=Number((statement as any).rows_total??0)===0&&["uploaded","failed","needs_review"].includes(String((statement as any).status));
   const totalPages=Math.max(1,Math.ceil(totalFiltered/PAGE_SIZE));
   const autoPosted=Number((statement as any).rows_auto_posted??0); const pendingReview=Number((statement as any).rows_pending_review??0); const known=Number((statement as any).rows_already_known??0); const parserExceptions=Number((statement as any).rows_need_review??0);
   const tabHref=(next:ReviewView)=>`/statements/${id}?view=${next}${keyword?`&keyword=${encodeURIComponent(keyword)}`:""}#transactions`;
+  const candidateRows=candidates.reduce((sum:number,c:any)=>sum+Number(c.evidence?.transaction_count??0),0);
+  const candidateOut=candidates.reduce((sum:number,c:any)=>sum+Number(c.evidence?.money_out??0),0);
+  const candidateIn=candidates.reduce((sum:number,c:any)=>sum+Number(c.evidence?.money_in??0),0);
 
   return <main className="page-shell"><div className="content-wrap review-wrap">
-    <div className="page-actions"><div className="button-row"><Link href="/" className="text-link">← Dashboard</Link><Link href="/statements" className="text-link">Statement History</Link></div><div className="button-row"><Link href="/projects" className="secondary-button">Projects</Link><Link href="/statements/upload" className="primary-link-button">Upload Next Statement</Link></div></div>
+    <div className="page-actions"><div className="button-row"><Link href="/" className="text-link">← Dashboard</Link><Link href="/statements" className="text-link">Statement History</Link></div><div className="button-row"><Link href={`/statements/${id}/projects`} className="secondary-button">Project Signals</Link><Link href="/statements/upload" className="primary-link-button">Upload Next Statement</Link></div></div>
     <header className="compact-header"><p className="mini-eyebrow">Import Review</p><h1>{(statement as any).detected_institution_name||"Bank Statement"} · {(statement as any).detected_account_name||"Account"}</h1><p>{document?.file_name} · {(statement as any).period_start||"Period unknown"} → {(statement as any).period_end||"—"}</p></header>
 
     {duplicateNotice&&<div className="notice notice-amber"><b>Exact duplicate detected.</b> Nothing was counted twice.</div>}
     {(statement as any).overlapping_import_id&&<div className="notice notice-blue"><b>Overlapping statement period.</b> Known rows are separated from genuinely new movements.</div>}
     {(statement as any).detected_as_new_account&&<div className="notice notice-green"><b>New financial account detected.</b> Future statements using this account identity will be compared against it.</div>}
-    {autoPosted>0&&<div className="notice notice-green"><b>{autoPosted.toLocaleString()} transactions posted automatically.</b> They had one unique high-confidence existing-project match. {pendingReview.toLocaleString()} unresolved transactions remain for review.</div>}
+    {autoPosted>0&&<div className="notice notice-green"><b>{autoPosted.toLocaleString()} transactions posted automatically.</b> They had a unique high-confidence existing-project match. {pendingReview.toLocaleString()} unresolved transactions remain for review.</div>}
     {confirmation==="posted"&&<div className="notice notice-green"><b>Transaction confirmed and posted.</b> Project totals were recalculated.</div>}
     {confirmation==="already"&&<div className="notice notice-amber"><b>Already recorded.</b> This statement row already has a primary accounting transaction.</div>}
-    {candidateNotice==="created"&&<div className="notice notice-green"><b>Project created from statement signal.</b> Matching rows are linked for review.</div>}
-    {candidateNotice==="linked"&&<div className="notice notice-green"><b>Keyword linked to an existing project.</b> Matching rows are now project suggestions.</div>}
-    {candidateNotice==="ignored"&&<div className="notice notice-amber"><b>Candidate ignored.</b> Those transactions remain in the normal review queue.</div>}
     {showAnalyse&&<AnalyseStatementButton importId={id}/>} 
 
     <section className="review-kpis">
@@ -65,10 +65,17 @@ export default async function StatementReviewPage({params,searchParams}:{params:
     </section>
 
     {Number((statement as any).rows_total??0)>0&&<article className="review-card" style={{marginBottom:14}}>
-      <div className="review-card-head"><div><small>Project Discovery</small><h2>Existing Projects & Possible New Projects</h2></div><DiscoverProjectsButton importId={id} compact={existingProjects.length>0||candidates.length>0}/></div>
-      <p style={{margin:"0 0 12px",color:"#65778b",fontSize:11}}>Unique high-confidence matches to existing projects post automatically. Possible new-project keywords always require your decision.</p>
-      {existingProjects.length>0&&<div style={{display:"grid",gap:8,marginBottom:14}}><b style={{fontSize:12}}>Existing projects detected</b><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:8}}>{existingProjects.map((m:any)=><div key={m.project_id} style={{border:"1px solid #dbe5ed",borderRadius:11,padding:11,background:"#fbfdff"}}><div style={{display:"flex",justifyContent:"space-between",gap:8}}><b style={{fontSize:12}}>{m.project_code} · {m.project_name}</b><span style={{fontSize:10,color:"#16825c",fontWeight:800}}>{Number(m.max_confidence||0).toFixed(0)}%</span></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginTop:8,fontSize:10}}><span><small style={{display:"block",color:"#82909e"}}>Matched</small><b>{m.matched_rows}</b></span><span><small style={{display:"block",color:"#82909e"}}>Money in</small><b>{money(m.money_in)}</b></span><span><small style={{display:"block",color:"#82909e"}}>Money out</small><b>{money(m.money_out)}</b></span></div><Link href={`/projects/${m.project_id}`} style={{display:"inline-block",marginTop:8,fontSize:10,fontWeight:800}}>Open project →</Link></div>)}</div></div>}
-      {candidates.length>0&&<div style={{display:"grid",gap:8}}><b style={{fontSize:12}}>Possible new projects / tags</b>{candidates.slice(0,15).map((c:any)=>{const e=c.evidence??{};const createHref=`/projects/new?candidate=${encodeURIComponent(c.id)}&import=${encodeURIComponent(id)}&name=${encodeURIComponent(c.suggested_name||e.keyword||"")}&code=${encodeURIComponent(c.suggested_code||"")}`;return <div key={c.id} style={{border:"1px solid #e2e8ee",borderRadius:10,padding:10,display:"grid",gap:7}}><div style={{display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>{c.suggested_name}</b><span style={{fontSize:10,color:"#8f6818"}}>{e.transaction_count||0} rows · {Number(c.confidence||0).toFixed(0)}% signal</span></div><div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}><Link href={createHref} className="primary-link-button">Create Project</Link><form action={linkCandidateToProject} style={{display:"flex",gap:5}}><input type="hidden" name="candidate_id" value={c.id}/><input type="hidden" name="import_id" value={id}/><select name="project_id" required defaultValue="" style={{border:"1px solid #cfd9e3",borderRadius:8,padding:"7px 8px",fontSize:10}}><option value="" disabled>Link existing…</option>{(projects??[]).map((p:any)=><option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select><button className="secondary-button" type="submit">Link</button></form><Link href={`/statements/${id}?view=review&keyword=${encodeURIComponent(e.keyword||c.suggested_name)}#transactions`} className="secondary-button">Review rows</Link><form action={ignoreCandidate}><input type="hidden" name="candidate_id" value={c.id}/><input type="hidden" name="import_id" value={id}/><button className="secondary-button" type="submit">Ignore</button></form></div></div>})}</div>}
+      <div className="review-card-head"><div><small>Project Intelligence</small><h2>{candidates.length?`${candidates.length} possible new project/site signals`:`${existingProjects.length} existing project matches`}</h2></div><DiscoverProjectsButton importId={id} compact={existingProjects.length>0||candidates.length>0}/></div>
+      <p style={{margin:"0 0 11px",color:"#65778b",fontSize:11,lineHeight:1.5}}>Known project matches can post automatically. New tags such as PCC, STW or SRT stay as suggestions until you create or link the real project.</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(135px,1fr))",gap:8,marginBottom:11}}>
+        <div className="mini-card"><small>Existing projects detected</small><b>{existingProjects.length}</b></div>
+        <div className="mini-card"><small>Possible new projects</small><b>{candidates.length}</b></div>
+        <div className="mini-card"><small>Rows behind new signals</small><b>{candidateRows.toLocaleString()}</b></div>
+        <div className="mini-card"><small>Signal money out</small><b>{money(candidateOut)}</b></div>
+        <div className="mini-card"><small>Signal money in</small><b>{money(candidateIn)}</b></div>
+      </div>
+      {candidates.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:11}}>{candidates.slice(0,8).map((c:any)=><span key={c.id} style={{background:"#f3f7fa",border:"1px solid #dce6ed",borderRadius:999,padding:"5px 8px",fontSize:9,fontWeight:800}}>{c.suggested_name} · {Number(c.confidence||0).toFixed(0)}%</span>)}</div>}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><Link href={`/statements/${id}/projects`} className="primary-link-button">Review / Create Projects →</Link><Link href="/projects" className="secondary-button">All Projects</Link></div>
     </article>}
 
     <article className="review-card" id="transactions">
