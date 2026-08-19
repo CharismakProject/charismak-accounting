@@ -19,6 +19,33 @@ export default function UploadStatementClient(){
   function addFiles(files:FileList|null){if(!files?.length)return;setBatchMessage("");setItems(current=>{const existing=new Set(current.map(i=>`${i.file.name}|${i.file.size}|${i.file.lastModified}`));const additions=Array.from(files).filter(f=>!existing.has(`${f.name}|${f.size}|${f.lastModified}`)).map(file=>{const institution=inferInstitution(file.name);return{id:crypto.randomUUID(),file,institution,accountName:institution?`${institution} Account`:"",accountNumber:"",status:"ready" as const,message:"Confirm the account details below before processing."};});return[...current,...additions];});}
   function removeItem(id:string){if(!busy)setItems(current=>current.filter(item=>item.id!==id));}
 
+  async function findExistingAccount(companyId:string,item:BatchItem,accountType:string){
+    const accountNumber=item.accountNumber.trim();
+    if(accountNumber){
+      const {data,error}=await supabase.from("financial_accounts").select("id,account_name,institution_name,account_type").eq("company_id",companyId).eq("account_number_masked",accountNumber).eq("is_active",true).limit(2);
+      if(error)throw new Error(error.message);
+      if((data??[]).length===1)return data![0];
+      const typed=(data??[]).find((row:any)=>String(row.account_type)===accountType);
+      if(typed)return typed;
+    }
+
+    const {data:institutionAccounts,error:institutionError}=await supabase.from("financial_accounts")
+      .select("id,account_name,institution_name,account_type")
+      .eq("company_id",companyId)
+      .eq("account_type",accountType)
+      .eq("is_active",true)
+      .ilike("institution_name",item.institution.trim())
+      .limit(10);
+    if(institutionError)throw new Error(institutionError.message);
+    const matches=institutionAccounts??[];
+    if(matches.length===1)return matches[0];
+    if(matches.length>1){
+      const exact=matches.find((row:any)=>String(row.account_name||"").trim().toLowerCase()===item.accountName.trim().toLowerCase());
+      if(exact)return exact;
+    }
+    return null;
+  }
+
   async function processItem(item:BatchItem,companyId:string,userId:string){
     const ext=item.file.name.split(".").pop()?.toLowerCase()??"";
     if(!["pdf","csv","xls","xlsx"].includes(ext))throw new Error("Use PDF, CSV, XLS or XLSX.");
@@ -32,13 +59,11 @@ export default function UploadStatementClient(){
     if(duplicate){const {data:existingImport}=await supabase.from("statement_imports").select("id,rows_total,rows_auto_posted,rows_pending_review").eq("document_id",duplicate.id).maybeSingle();updateItem(item.id,{status:"duplicate",importId:existingImport?.id,rows:Number(existingImport?.rows_total??0),autoPosted:Number(existingImport?.rows_auto_posted??0),pendingReview:Number(existingImport?.rows_pending_review??0),message:"This exact file is already stored. Nothing was counted twice."});return;}
 
     const accountType=inferAccountType(item.institution);
-    let accountQuery=supabase.from("financial_accounts").select("id").eq("company_id",companyId).eq("account_type",accountType);
-    accountQuery=item.accountNumber.trim()?accountQuery.eq("account_number_masked",item.accountNumber.trim()):accountQuery.ilike("account_name",item.accountName.trim()).ilike("institution_name",item.institution.trim());
-    const {data:existingAccount,error:accountLookupError}=await accountQuery.limit(1).maybeSingle(); if(accountLookupError)throw new Error(accountLookupError.message);
+    const existingAccount=await findExistingAccount(companyId,item,accountType);
     let accountId=existingAccount?.id as string|undefined; const isNewAccount=!accountId;
     if(!accountId){const {data:createdAccount,error:accountError}=await supabase.from("financial_accounts").insert({company_id:companyId,account_type:accountType,institution_name:item.institution.trim(),institution_key:item.institution.trim().toLowerCase().replace(/[^a-z0-9]+/g,"_"),account_name:item.accountName.trim(),account_number_masked:item.accountNumber.trim()||null,created_by:userId}).select("id").single();if(accountError)throw new Error(accountError.message);accountId=createdAccount.id;}
 
-    updateItem(item.id,{status:"uploading",message:"Saving the original statement privately."});
+    updateItem(item.id,{status:"uploading",message:isNewAccount?"Saving the original statement and registering a new account.":`Saving the original statement to the matched ${existingAccount?.account_name||item.institution} account.`});
     const storagePath=`${companyId}/bank-statements/${new Date().getUTCFullYear()}/${Date.now()}-${safeFileName(item.file.name)}`;
     const {error:storageError}=await supabase.storage.from("financial-documents").upload(storagePath,item.file,{contentType:item.file.type||"application/octet-stream",upsert:false}); if(storageError)throw new Error(`Secure upload failed: ${storageError.message}`);
     const {data:document,error:documentError}=await supabase.from("source_documents").insert({company_id:companyId,document_type:"bank_statement",file_name:item.file.name,storage_path:storagePath,file_hash:fileHash,source_name:item.institution.trim(),metadata:{original_size:item.file.size,extension:ext,mime_type:item.file.type||null,upload_method:"batch_browser_storage"},uploaded_by:userId}).select("id").single();
