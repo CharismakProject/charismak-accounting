@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "../../../lib/supabase/client";
 
 export default function AnalyseStatementButton({ importId }: { importId: string }) {
   const router = useRouter();
@@ -14,10 +15,13 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
     setError("");
     setMessage("Extracting transactions from the stored PDF…");
     try {
-      const response = await fetch(`/api/statements/${importId}/analyse`, { method: "POST" });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "PDF analysis failed.");
-      setMessage(`Found ${result.rows ?? 0} transaction row(s). Refreshing review…`);
+      const supabase = createClient();
+      const { data, error: invokeError } = await supabase.functions.invoke("analyse-statement", {
+        body: { importId },
+      });
+      if (invokeError) throw new Error(invokeError.message || "PDF analysis failed.");
+      if (data?.error) throw new Error(data.error);
+      setMessage(`Found ${data?.rows ?? 0} transaction row(s). Refreshing review…`);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "PDF analysis failed.");
@@ -30,11 +34,11 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
   return (
     <div className="analyse-box">
       <div>
-        <strong>PDF uploaded, transaction extraction pending</strong>
-        <span>The original file is safe. Run the OPay parser to populate dates, debit/credit amounts, balances and references.</span>
+        <strong>Statement uploaded — analysis pending</strong>
+        <span>Run the secure statement processor to extract dates, debit/credit amounts, balances and references.</span>
       </div>
       <button type="button" className="primary-action compact-button" disabled={busy} onClick={analyse}>
-        {busy ? "Analysing…" : "Analyse PDF now"}
+        {busy ? "Analysing…" : "Analyse statement"}
       </button>
       {message && <small className="analyse-message">{message}</small>}
       {error && <small className="analyse-error">{error}</small>}
