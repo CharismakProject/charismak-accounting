@@ -4,7 +4,7 @@ import UploadStatementClient from "./UploadStatementClient";
 export default function UploadStatementPage() {
   return (
     <main className="page-canvas">
-      <div className="page-wrap narrow">
+      <div className="page-wrap upload-wrap">
         <div className="page-toolbar">
           <Link href="/" className="back-link">← Dashboard</Link>
           <Link href="/statements" className="secondary-link">Statement history</Link>
@@ -12,9 +12,9 @@ export default function UploadStatementPage() {
 
         <header className="page-heading compact">
           <div>
-            <p className="page-eyebrow green">Recurring statement import</p>
-            <h1>Upload bank statement</h1>
-            <p>Upload each month from the same or a new account. The app stores the original securely and checks for exact duplicate files before registering the import.</p>
+            <p className="page-eyebrow green">Banking · recurring imports</p>
+            <h1>Upload & analyse statements</h1>
+            <p>Select one or several statements in the same batch. Each file keeps its own bank/account identity, duplicate check, transaction analysis and project-discovery result.</p>
           </div>
         </header>
 
@@ -23,8 +23,8 @@ export default function UploadStatementPage() {
         </section>
 
         <section className="info-strip">
-          <b>Current working scope</b>
-          <span>PDFs are stored and registered reliably. CSV transaction parsing exists. Bank-specific PDF transaction extraction will be added against the real statement formats you upload.</span>
+          <b>What happens automatically</b>
+          <span>Each original file is stored privately → exact duplicates are blocked → transactions are extracted → existing project names/codes/aliases are checked → repeated unknown keywords are proposed as possible projects. Nothing changes an official project total until an authorised user confirms the classification.</span>
         </section>
       </div>
     </main>
