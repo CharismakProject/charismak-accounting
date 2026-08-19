@@ -44,6 +44,12 @@ export default function MobileMenu() {
     ? [...baseItems, ["People & Access", "/admin/access"] as const, ["Audit trail", "/audit"] as const]
     : baseItems;
 
+  const isActive = (href:string) => {
+    if (href === "/") return pathname === "/";
+    if (href === "/statements") return pathname.startsWith("/statements") && !pathname.startsWith("/statements/upload");
+    return pathname.startsWith(href);
+  };
+
   return (
     <>
       <button
@@ -68,10 +74,7 @@ export default function MobileMenu() {
           <button type="button" aria-label="Close menu" onClick={() => setOpen(false)}>×</button>
         </div>
         <nav>
-          {items.map(([label, href]) => {
-            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-            return <Link key={href} href={href} className={active ? "active" : ""}>{label}<span>›</span></Link>;
-          })}
+          {items.map(([label, href]) => <Link key={href} href={href} className={isActive(href) ? "active" : ""}>{label}<span>›</span></Link>)}
         </nav>
         <p>Same workspace and permissions on phone, tablet and desktop.</p>
       </aside>
