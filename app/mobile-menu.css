@@ -1,0 +1,18 @@
+.mobile-menu-trigger,.mobile-menu-drawer,.mobile-menu-backdrop{display:none}
+@media(max-width:700px){
+  body{padding-bottom:66px}
+  .mobile-menu-trigger{display:flex;position:fixed;z-index:1200;left:14px;bottom:14px;align-items:center;gap:8px;border:0;border-radius:999px;background:#082945;color:#fff;box-shadow:0 10px 30px rgba(8,41,69,.28);padding:11px 16px;font:inherit;cursor:pointer}
+  .mobile-menu-trigger span{font-size:18px;line-height:1}.mobile-menu-trigger b{font-size:12px;letter-spacing:.01em}
+  .mobile-menu-backdrop{display:block;position:fixed;z-index:1190;inset:0;border:0;background:rgba(5,23,39,.42);backdrop-filter:blur(2px)}
+  .mobile-menu-drawer{display:flex;position:fixed;z-index:1210;left:0;top:0;bottom:0;width:min(84vw,320px);transform:translateX(-105%);transition:transform .22s ease;background:#082945;color:#fff;box-shadow:16px 0 40px rgba(0,0,0,.2);padding:calc(18px + env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom));flex-direction:column;overflow:auto}
+  .mobile-menu-drawer.open{transform:translateX(0)}
+  .mobile-menu-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 4px 16px;border-bottom:1px solid rgba(255,255,255,.12)}
+  .mobile-menu-head small{display:block;font-size:8px;letter-spacing:.18em;color:#8fb1c8;font-weight:900}.mobile-menu-head b{display:block;margin-top:3px;font-size:18px}
+  .mobile-menu-head button{width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#fff;font-size:24px;line-height:1}
+  .mobile-menu-drawer nav{display:grid;gap:5px;margin-top:14px}
+  .mobile-menu-drawer nav a{display:flex;justify-content:space-between;align-items:center;text-decoration:none;color:#dceaf3;border-radius:10px;padding:12px 11px;font-size:12px;font-weight:750}
+  .mobile-menu-drawer nav a.active{background:#fff;color:#082945}.mobile-menu-drawer nav a:not(.active):hover{background:rgba(255,255,255,.07)}
+  .mobile-menu-drawer nav a span{font-size:19px;opacity:.65}
+  .mobile-menu-drawer>p{margin:auto 4px 0;padding-top:20px;color:#91adbf;font-size:9px;line-height:1.5}
+  .notification-bell{top:12px!important;right:12px!important}
+}
