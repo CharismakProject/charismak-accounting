@@ -6,6 +6,7 @@ import "./project-workspace.css";
 import "./app-enhancements.css";
 import "./role-dashboard.css";
 import "./operations.css";
+import "./workflow-enhancements.css";
 import PwaRegister from "./PwaRegister";
 import NotificationBell from "./NotificationBell";
 
