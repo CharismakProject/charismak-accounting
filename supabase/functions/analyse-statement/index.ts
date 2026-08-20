@@ -21,7 +21,121 @@ function moneyMatches(s:string){return [...s.matchAll(MONEY_TOKEN)].map(m=>({raw
 function direction(text:string):"debit"|"credit"|null{const t=text.toLowerCase();if(/\bcr\b|credit|deposit|inward|received|transfer\s+from|payment\s+from|cash\s+deposit/.test(t))return "credit";if(/\bdr\b|debit|withdraw|purchase|charge|fee|levy|payment|pos\b|atm\b|transfer\s+to|payment\s+to/.test(t))return "debit";return null;}
 function cleanNarration(block:string){return block.replace(new RegExp(DATE_TOKEN,"gi")," ").replace(MONEY_TOKEN," ").replace(/\s+/g," ").replace(/^(date|value date|description|narration|debit|credit|balance)\b/gi,"").trim().slice(0,700)||"Bank statement transaction";}
 function opayPdf(lines:string[]){const dpat=/(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})/gi,apat=/([+-]\s*₦?\s*[\d,]+\.\d{2})/,bpat=/₦?\s*([\d,]+\.\d{2})/,rpat=/(\d{12,})\s*$/;const rows:Row[]=[];for(let i=0;i<lines.length;i++){let s=lines[i],ds=[...s.matchAll(dpat)];if(ds.length>=1&&!apat.test(s)&&i+1<lines.length){s=`${s} ${lines[i+1]}`;ds=[...s.matchAll(dpat)];}if(ds.length<2)continue;const d=date(ds[0][1]),v=date(ds[1][1]);if(!d)continue;const tail=s.slice((ds[1].index??0)+ds[1][0].length),am=tail.match(apat);if(!am||am.index===undefined)continue;const x=money(am[1]);if(x===null)continue;const rest=tail.slice(am.index+am[0].length),bm=rest.match(bpat),rm=s.match(rpat);rows.push({date:d,valueDate:v,narration:tail.slice(0,am.index).trim()||"OPay transaction",reference:rm?.[1]??null,counterparty:null,debit:x<0?Math.abs(x):null,credit:x>0?x:null,amount:x,balance:bm?money(bm[1]):null,source:i+1,confidence:.96});}return rows;}
-function genericPdf(lines:string[]){const header=lines.slice(0,180).join(" ").toLowerCase();const debitAt=header.indexOf("debit"),creditAt=header.indexOf("credit"),hasDebitCredit=debitAt>=0&&creditAt>=0,order=hasDebitCredit?(debitAt<creditAt?"debit_credit":"credit_debit"):null,hasBalance=/\bbalance\b/.test(header);const startRe=new RegExp(`^\\s*${DATE_TOKEN}`,"i");const blocks:{text:string;source:number}[]=[];let current="",source=0;for(let i=0;i<lines.length;i++){const line=lines[i];if(startRe.test(line)&&current&&moneyMatches(current).length){blocks.push({text:current,source});current=line;source=i+1;}else if(current){current+=` ${line}`;}else if(startRe.test(line)){current=line;source=i+1;}}if(current&&moneyMatches(current).length)blocks.push({text:current,source});const rows:Row[]=[];let ambiguous=0;for(const block of blocks){const ds=dateMatches(block.text);const ms=moneyMatches(block.text);if(!ds.length||!ms.length)continue;const d=ds[0].value as string,v=(ds[1]?.value as string|undefined)??null;let debit:number|null=null,credit:number|null=null,balance:number|null=null,amount:number|null=null,confidence=.72;const explicit=ms.find(m=>/\b(?:DR|CR)\b/i.test(m.raw));if(explicit){if(/CR/i.test(explicit.raw)){credit=Math.abs(explicit.value);amount=credit;}else{debit=Math.abs(explicit.value);amount=-debit;}if(hasBalance&&ms.length>1)balance=ms[ms.length-1].value;confidence=.94;}else if(hasDebitCredit&&ms.length>=(hasBalance?3:2)){const a=ms[ms.length-(hasBalance?3:2)].value,b=ms[ms.length-(hasBalance?2:1)].value;if(order==="debit_credit"){debit=Math.abs(a)||null;credit=Math.abs(b)||null;}else{credit=Math.abs(a)||null;debit=Math.abs(b)||null;}if(hasBalance)balance=ms[ms.length-1].value;if(credit&&credit!==0)amount=credit;else if(debit&&debit!==0)amount=-debit;confidence=.92;}else{if(hasBalance&&ms.length>=2)balance=ms[ms.length-1].value;const candidate=hasBalance&&ms.length>=2?ms[ms.length-2]:ms[ms.length-1];const dir=direction(block.text);if(dir==="credit"){credit=Math.abs(candidate.value);amount=credit;confidence=.82;}else if(dir==="debit"){debit=Math.abs(candidate.value);amount=-debit;confidence=.82;}else{amount=null;ambiguous++;confidence=.45;}}const narration=cleanNarration(block.text);const ref=(block.text.match(/\b[A-Z0-9]{10,30}\b/i)||[])[0]??null;rows.push({date:d,valueDate:v,narration,reference:ref,counterparty:null,debit,credit,amount,balance,source:block.source,confidence});}return {rows,ambiguous};}
-async function pdf(bytes:Uint8Array){const doc=await getDocumentProxy(bytes);const ex=await extractText(doc,{mergePages:true});const lines=String(ex.text||"").split(/\r?\n/).map((x:string)=>x.replace(/\s+/g," ").trim()).filter(Boolean);if(!lines.length)throw new Error("No selectable text was found in this PDF. If the statement is a scanned image, export it as XLSX/CSV or a text-based PDF.");const opay=opayPdf(lines);if(opay.length>=3)return {parser:"opay_pdf_v3",confidence:.96,warnings:[],rows:opay};const generic=genericPdf(lines);if(!generic.rows.length)throw new Error("PDF text was extracted but no transaction table could be recognised. Try XLSX/CSV for this statement, or keep the PDF for a bank-specific parser update.");const warnings:string[]=[];if(generic.ambiguous)warnings.push(`${generic.ambiguous} PDF row${generic.ambiguous===1?"":"s"} had an ambiguous debit/credit direction and were left for manual review instead of being guessed.`);if(!generic.rows.some(r=>r.balance!==null))warnings.push("No reliable running-balance column was recognised; the account balance was not overwritten.");return {parser:"generic_bank_pdf_v1",confidence:generic.ambiguous?0.78:0.9,warnings,rows:generic.rows};}
+function repairSplitDateLines(lines:string[]){
+  const result:string[]=[];
+  const month="(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)";
+  const partial=new RegExp(`^(\\d{1,2}-${month}-)\\s+(\\d{1,2}-${month}-)(.*)$`,"i");
+  for(let i=0;i<lines.length;i++){
+    const first=lines[i].match(partial);
+    const years=lines[i+1]?.match(/^(20\d{2})\s+(20\d{2})(.*)$/);
+    if(first&&years){
+      result.push(`${first[1]}${years[1]} ${first[2]}${years[2]} ${first[3]} ${years[3]}`.replace(/\s+/g," ").trim());
+      i++;
+    }else result.push(lines[i]);
+  }
+  return result;
+}
+
+function statedTotal(header:string,label:string){
+  const match=header.match(new RegExp(`${label}\\s*:?\\s*([\\d,]+\\.\\d{2})`,"i"));
+  return match?money(match[1]):null;
+}
+
+function genericPdf(lines:string[]){
+  const header=lines.slice(0,180).join(" ");
+  const lowerHeader=header.toLowerCase();
+  const debitAt=lowerHeader.indexOf("debit"),creditAt=lowerHeader.indexOf("credit");
+  const hasDebitCredit=debitAt>=0&&creditAt>=0;
+  const order=hasDebitCredit?(debitAt<creditAt?"debit_credit":"credit_debit"):null;
+  const hasBalance=/\bbalance\b/i.test(header);
+  const startRe=new RegExp(`^\\s*${DATE_TOKEN}`,"i");
+  const blocks:{text:string;source:number}[]=[];
+  let current="",source=0;
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    if(startRe.test(line)&&current&&moneyMatches(current).length){blocks.push({text:current,source});current=line;source=i+1;}
+    else if(current)current+=` ${line}`;
+    else if(startRe.test(line)){current=line;source=i+1;}
+  }
+  if(current&&moneyMatches(current).length)blocks.push({text:current,source});
+
+  const rows:Row[]=[];
+  const candidates:number[][]=[];
+  const opening:boolean[]=[];
+  for(const block of blocks){
+    const ds=dateMatches(block.text),ms=moneyMatches(block.text);
+    if(!ds.length||!ms.length)continue;
+    const d=ds[0].value as string,v=(ds[1]?.value as string|undefined)??null;
+    let debit:number|null=null,credit:number|null=null,balance:number|null=null,amount:number|null=null,confidence=.72;
+    const isOpening=/\bopening balance\b/i.test(block.text);
+    const explicit=ms.find(m=>/\b(?:DR|CR)\b/i.test(m.raw));
+    if(hasBalance)balance=ms[ms.length-1].value;
+    if(isOpening){amount=null;confidence=.99;}
+    else if(explicit){
+      if(/CR/i.test(explicit.raw)){credit=Math.abs(explicit.value);amount=credit;}else{debit=Math.abs(explicit.value);amount=-debit;}
+      confidence=.94;
+    }else if(hasDebitCredit&&ms.length>=(hasBalance?3:2)){
+      const a=ms[ms.length-(hasBalance?3:2)].value,b=ms[ms.length-(hasBalance?2:1)].value;
+      if(order==="debit_credit"){debit=Math.abs(a)||null;credit=Math.abs(b)||null;}else{credit=Math.abs(a)||null;debit=Math.abs(b)||null;}
+      if(credit&&credit!==0)amount=credit;else if(debit&&debit!==0)amount=-debit;
+      confidence=.92;
+    }else{
+      const candidate=hasBalance&&ms.length>=2?ms[ms.length-2]:ms[ms.length-1];
+      const dir=direction(block.text);
+      if(dir==="credit"){credit=Math.abs(candidate.value);amount=credit;confidence=.82;}
+      else if(dir==="debit"){debit=Math.abs(candidate.value);amount=-debit;confidence=.82;}
+      else{amount=null;confidence=.45;}
+    }
+    const narration=cleanNarration(block.text);
+    const ref=(block.text.match(/\b[A-Z0-9]{10,30}\b/i)||[])[0]??null;
+    rows.push({date:d,valueDate:v,narration,reference:ref,counterparty:null,debit,credit,amount,balance,source:block.source,confidence});
+    candidates.push(ms.slice(0,hasBalance?-1:undefined).map(m=>Math.abs(m.value)));
+    opening.push(isOpening);
+  }
+
+  // Some bank PDFs omit empty debit/credit cells. Reconstruct direction from
+  // consecutive balances, but keep it only when the entire statement exactly
+  // reconciles to the bank's own printed debit and credit totals.
+  const proposed=rows.map(row=>({...row}));
+  let previousBalance:number|null=null;
+  let balanceInferences=0;
+  for(let i=0;i<proposed.length;i++){
+    const row=proposed[i];
+    if(row.balance===null)continue;
+    if(opening[i]){previousBalance=row.balance;continue;}
+    if(previousBalance!==null){
+      const delta=Math.round((row.balance-previousBalance)*100)/100;
+      const matching=candidates[i].some(value=>Math.abs(value-Math.abs(delta))<=.02);
+      if(matching&&Math.abs(delta)>=.005){
+        row.amount=delta;row.debit=delta<0?Math.abs(delta):null;row.credit=delta>0?delta:null;row.confidence=.98;balanceInferences++;
+      }
+    }
+    previousBalance=row.balance;
+  }
+  const totalDebit=statedTotal(header,"total debit"),totalCredit=statedTotal(header,"total credit");
+  const parsedDebit=proposed.reduce((sum,row)=>sum+(row.debit??0),0);
+  const parsedCredit=proposed.reduce((sum,row)=>sum+(row.credit??0),0);
+  const totalsReconcile=totalDebit!==null&&totalCredit!==null&&Math.abs(parsedDebit-totalDebit)<=.05&&Math.abs(parsedCredit-totalCredit)<=.05;
+  const finalRows=(totalsReconcile?proposed:rows).filter((_,index)=>!opening[index]);
+  const ambiguous=finalRows.filter(row=>row.amount===null).length;
+  return {rows:finalRows,ambiguous,balanceInferences:totalsReconcile?balanceInferences:0,totalsReconcile};
+}
+
+async function pdf(bytes:Uint8Array){
+  const doc=await getDocumentProxy(bytes);
+  const ex=await extractText(doc,{mergePages:true});
+  const rawLines=String(ex.text||"").split(/\r?\n/).map((x:string)=>x.replace(/\s+/g," ").trim()).filter(Boolean);
+  const lines=repairSplitDateLines(rawLines);
+  if(!lines.length)throw new Error("No selectable text was found in this PDF. If the statement is a scanned image, export it as XLSX/CSV or a text-based PDF.");
+  const opay=opayPdf(lines);
+  if(opay.length>=3)return {parser:"opay_pdf_v3",confidence:.96,warnings:[],rows:opay};
+  const generic=genericPdf(lines);
+  if(!generic.rows.length)throw new Error("PDF text was extracted but no transaction table could be recognised. Try XLSX/CSV for this statement, or keep the PDF for a bank-specific parser update.");
+  const warnings:string[]=[];
+  if(generic.balanceInferences)warnings.push(`${generic.balanceInferences} transaction direction${generic.balanceInferences===1?" was":"s were"} safely reconstructed from the running balance and verified against the bank's printed totals.`);
+  if(generic.ambiguous)warnings.push(`${generic.ambiguous} PDF row${generic.ambiguous===1?"":"s"} had an ambiguous debit/credit direction and were left for manual review instead of being guessed.`);
+  if(!generic.rows.some(r=>r.balance!==null))warnings.push("No reliable running-balance column was recognised; the account balance was not overwritten.");
+  return {parser:"generic_bank_pdf_v2",confidence:generic.ambiguous?0.78:generic.totalsReconcile?.98:.9,warnings,rows:generic.rows};
+}
 
 Deno.serve(async(req:Request)=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});if(req.method!=="POST")return out({error:"POST required"},405);const auth=req.headers.get("Authorization")??"";const sb=createClient(Deno.env.get("SUPABASE_URL")!,Deno.env.get("SUPABASE_ANON_KEY")!,{global:{headers:{Authorization:auth}}});const {data:{user}}=await sb.auth.getUser();if(!user)return out({error:"Sign in again."},401);const body=await req.json().catch(()=>({}));const id=String(body?.importId??"");if(!id)return out({error:"importId is required"},400);const {data:si,error:se}=await sb.from("statement_imports").select("id,financial_account_id,document:source_documents(id,file_name,storage_path,metadata)").eq("id",id).single();if(se||!si)return out({error:se?.message||"Statement not found or access denied"},404);const {data:existing}=await sb.from("statement_rows").select("id").eq("import_id",id).limit(1);if((existing??[]).length){const {data:f,error:e}=await sb.rpc("finalize_statement_import",{target_import:id});return e?out({error:e.message},500):out({ok:true,alreadyAnalysed:true,...f});}const doc=Array.isArray((si as any).document)?(si as any).document[0]:(si as any).document;const ext=String(doc?.metadata?.extension??doc?.file_name?.split(".").pop()??"").toLowerCase();await sb.from("statement_imports").update({status:"parsing",updated_at:new Date().toISOString()}).eq("id",id);try{const buckets=[String(doc?.metadata?.bucket??""),"financial-documents","universal-intake"].filter((value,index,list)=>value&&list.indexOf(value)===index);let blob:Blob|null=null;let downloadMessage="Stored statement could not be downloaded";for(const bucket of buckets){const attempt=await sb.storage.from(bucket).download(doc.storage_path);if(attempt.data){blob=attempt.data;break;}if(attempt.error)downloadMessage=attempt.error.message;}if(!blob)throw new Error(downloadMessage);const bytes=new Uint8Array(await blob.arrayBuffer());const parsed=["xlsx","xls","csv"].includes(ext)?spreadsheet(bytes):ext==="pdf"?await pdf(bytes):null;if(!parsed)throw new Error(`Unsupported statement format: ${ext}`);for(let start=0;start<parsed.rows.length;start+=400){const batch=parsed.rows.slice(start,start+400).map((r,i)=>({import_id:id,row_index:start+i+1,transaction_date:r.date,value_date:r.valueDate,narration:r.narration,reference:r.reference,counterparty:r.counterparty,debit:r.debit,credit:r.credit,signed_amount:r.amount,running_balance:r.balance,detection_status:r.amount===null?"needs_review":"new",raw_payload:{parser:parsed.parser,source_row:r.source,parse_confidence:r.confidence}}));const {error:e}=await sb.from("statement_rows").insert(batch);if(e)throw new Error(e.message);}const {data:f,error:fe}=await sb.rpc("finalize_statement_import",{target_import:id});if(fe)throw new Error(fe.message);const last=[...parsed.rows].reverse().find(r=>r.balance!==null);if((si as any).financial_account_id){const patch:any={last_statement_at:new Date().toISOString()};if(last){patch.current_balance=last.balance;patch.balance_as_of=last.date;}await sb.from("financial_accounts").update(patch).eq("id",(si as any).financial_account_id);}await sb.from("statement_imports").update({closing_balance:last?.balance??null,parser_name:parsed.parser,parser_confidence:parsed.confidence,parse_warnings:parsed.warnings,analysed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",id);return out({ok:true,parser:parsed.parser,balanceDetected:Boolean(last),closingBalance:last?.balance??null,warnings:parsed.warnings,...f});}catch(e){await sb.from("statement_imports").update({status:"failed",parse_warnings:[e instanceof Error?e.message:"Statement analysis failed"],updated_at:new Date().toISOString()}).eq("id",id);return out({error:e instanceof Error?e.message:"Statement analysis failed"},500);}});
