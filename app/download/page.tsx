@@ -1,4 +1,4 @@
-const ANDROID_APK_URL = "https://github.com/CharismakProject/charismak-accounting/releases/download/android-latest/Charismak-Accounting-Android.apk";
+const ANDROID_APK_URL = "/downloads/Charismak-Accounting-Android.apk";
 const LOGO_URL = "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png";
 
 export default function DownloadPage() {

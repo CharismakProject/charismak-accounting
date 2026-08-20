@@ -58,10 +58,15 @@ jobs:
 
       - name: Build standalone release APK
         working-directory: mobile/android
+        env:
+          ORG_GRADLE_PROJECT_reactNativeArchitectures: armeabi-v7a,arm64-v8a
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Prepare downloadable file
-        run: cp mobile/android/app/build/outputs/apk/release/app-release.apk Charismak-Accounting-Android.apk
+        run: |
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk Charismak-Accounting-Android.apk
+          mkdir -p public/downloads
+          cp Charismak-Accounting-Android.apk public/downloads/Charismak-Accounting-Android.apk
 
       - name: Retain build artifact
         uses: actions/upload-artifact@v4
@@ -70,12 +75,10 @@ jobs:
           path: Charismak-Accounting-Android.apk
           retention-days: 30
 
-      - name: Publish stable Android beta download
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Publish APK to the website
         run: |
-          gh release delete android-latest --cleanup-tag --yes || true
-          gh release create android-latest Charismak-Accounting-Android.apk \
-            --title "Charismak Accounting Android Beta" \
-            --notes "Native Android beta. Uses the same live Charismak Accounting account, projects and permissions as the web workspace." \
-            --latest
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --force public/downloads/Charismak-Accounting-Android.apk
+          git commit -m "Publish Android beta APK"
+          git push origin HEAD:main

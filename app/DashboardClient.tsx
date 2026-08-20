@@ -7,7 +7,7 @@ import { createClient } from "../lib/supabase/client";
 export type RoleFamily = "md_owner" | "accountant_cfo" | "project_director" | "project_manager";
 
 const LOGO_URL = "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png";
-const ANDROID_APK_URL = "https://github.com/CharismakProject/charismak-accounting/releases/download/android-latest/Charismak-Accounting-Android.apk";
+const ANDROID_APK_URL = "/downloads/Charismak-Accounting-Android.apk";
 const money = (value: number | string | null | undefined) => value == null ? "—" : new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(Number(value));
 const compactMoney = (value: number) => `₦${new Intl.NumberFormat("en-NG", { notation: "compact", maximumFractionDigits: 1 }).format(Math.abs(value || 0))}`;
 
