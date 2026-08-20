@@ -12,6 +12,26 @@ async function sha256(file: File) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+async function functionErrorMessage(error: unknown) {
+  const fallback = error instanceof Error ? error.message : "The document analysis service could not complete this file.";
+  try {
+    const context = (error as { context?: Response } | null)?.context;
+    if (context && typeof context.clone === "function") {
+      const response = context.clone();
+      const payload = await response.json().catch(() => null) as { error?: string; message?: string } | null;
+      if (payload?.error) return payload.error;
+      if (payload?.message) return payload.message;
+      if (context.status === 401) return "Your secure session needs to be refreshed. Sign in again, then retry this file.";
+      if (context.status === 404) return "The document analysis service is not available on this deployment yet.";
+      if (context.status >= 500) return "Charismak could not finish analysing this file. The upload is safe; retry the same file after the service recovers.";
+    }
+  } catch {}
+  return fallback === "Edge Function returned a non-2xx status code"
+    ? "Charismak could not finish analysing this file. The upload is safe; retry the same file instead of uploading another copy."
+    : fallback;
+}
+
 const safe = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_");
 
 export default function UniversalAddClient({ companyId, projects, defaultProjectId = "" }: { companyId: string; projects: ProjectOption[]; defaultProjectId?: string }) {
@@ -38,6 +58,42 @@ export default function UniversalAddClient({ companyId, projects, defaultProject
       if (batchError || !batch) throw new Error(batchError?.message || "Could not create intake batch.");
 
       let done = 0, review = 0, failed = 0, duplicates = 0;
+
+      async function applyAnalysed(index: number, documentId: string, analysed: any) {
+        const type = String(analysed?.type || "document").replaceAll("_", " ");
+        const projectName = analysed?.projectName ? String(analysed.projectName) : undefined;
+
+        if (analysed?.statementImportId && analysed?.status === "applied") {
+          done++;
+          update(index, { state: "done", type: "bank statement", message: analysed?.message || "Statement understood and processed.", href: `/statements/${analysed.statementImportId}` });
+          return;
+        }
+
+        if (analysed?.projectId && analysed?.status === "ready") {
+          update(index, { message: "Project understood. Applying the safe interpretation…" });
+          const { data: applied, error: applyError } = await supabase.functions.invoke("auto-apply-project-document", { body: { documentId, projectId: analysed.projectId } });
+          if (!applyError && applied?.applied) {
+            done++;
+            const meaning = String(applied?.commercialRole && applied.commercialRole !== "none" ? applied.commercialRole : applied?.effect || "project evidence").replaceAll("_", " ");
+            update(index, { state: "done", type, project: projectName, message: `Understood and added automatically as ${meaning}.`, href: `/projects/${analysed.projectId}` });
+            return;
+          }
+          review++;
+          update(index, { state: "review", type, project: projectName, message: applied?.reason === "existing_base_scope" ? "I found an existing base contract. Confirm how this new commercial document relates to it." : "I know the project, but need one confirmation before changing the official record.", href: `/projects/${analysed.projectId}/documents` });
+          return;
+        }
+
+        const needsReview = analysed?.status === "needs_review";
+        if (needsReview) review++; else done++;
+        update(index, {
+          state: needsReview ? "review" : "done",
+          type,
+          project: projectName,
+          message: analysed?.message || (needsReview ? "I need one confirmation." : "Understood and organised."),
+          href: analysed?.statementImportId ? `/statements/${analysed.statementImportId}` : analysed?.projectId ? `/projects/${analysed.projectId}/documents` : undefined,
+        });
+      }
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         update(i, { state: "processing", message: "Reading file…" });
@@ -46,7 +102,19 @@ export default function UniversalAddClient({ companyId, projects, defaultProject
         if (!["pdf","csv","xlsx","xls","docx","jpg","jpeg","png","webp"].includes(ext)) { failed++; update(i, { state: "failed", message: "Unsupported file type." }); continue; }
         const hash = await sha256(file);
         const { data: duplicate } = await supabase.from("source_documents").select("id,project_id,document_type,file_name").eq("company_id", companyId).eq("file_hash", hash).limit(1).maybeSingle();
-        if (duplicate) { duplicates++; update(i, { state: "duplicate", type: String(duplicate.document_type), message: "Already uploaded before. Nothing was counted twice.", href: duplicate.project_id ? `/projects/${duplicate.project_id}/documents` : "/statements" }); continue; }
+        if (duplicate) {
+          const { data: previous } = await supabase.from("intake_items").select("id,batch_id,status,message").eq("document_id", duplicate.id).limit(1).maybeSingle();
+          if (previous?.batch_id && ["processing","failed","needs_review"].includes(String(previous.status)) && String(duplicate.document_type) === "other") {
+            update(i, { state: "processing", message: "Found the earlier upload. Retrying its analysis instead of uploading it twice…" });
+            const { data: analysed, error: retryError } = await supabase.functions.invoke("analyse-intake-document-v3", { body: { documentId: duplicate.id, batchId: previous.batch_id } });
+            if (retryError) { review++; update(i, { state: "review", message: await functionErrorMessage(retryError) }); continue; }
+            await applyAnalysed(i, duplicate.id, analysed);
+            continue;
+          }
+          duplicates++;
+          update(i, { state: "duplicate", type: String(duplicate.document_type), message: "Already uploaded before. Nothing was counted twice.", href: duplicate.project_id ? `/projects/${duplicate.project_id}/documents` : "/statements" });
+          continue;
+        }
 
         const path = `${companyId}/intake/${new Date().getUTCFullYear()}/${Date.now()}-${crypto.randomUUID().slice(0,8)}-${safe(file.name)}`;
         update(i, { message: "Uploading securely…" });
@@ -58,41 +126,15 @@ export default function UniversalAddClient({ companyId, projects, defaultProject
         if (itemError || !item) { failed++; update(i, { state: "failed", message: itemError?.message || "Could not create intake item." }); continue; }
 
         update(i, { message: "Understanding the document…" });
-        const { data: analysed, error: analyseError } = await supabase.functions.invoke("analyse-intake-document", { body: { documentId: doc.id, batchId: batch.id } });
-        if (analyseError) { review++; update(i, { state: "review", message: analyseError.message || "Uploaded, but needs review." }); continue; }
-
-        const type = String(analysed?.type || "document").replaceAll("_", " ");
-        const projectName = analysed?.projectName ? String(analysed.projectName) : undefined;
-
-        if (analysed?.statementImportId && analysed?.status === "applied") {
-          done++;
-          update(i, { state: "done", type: "bank statement", message: analysed?.message || "Statement understood and processed.", href: `/statements/${analysed.statementImportId}` });
-          continue;
-        }
-
-        if (analysed?.projectId && analysed?.status === "ready") {
-          update(i, { message: "Project understood. Applying the safe interpretation…" });
-          const { data: applied, error: applyError } = await supabase.functions.invoke("auto-apply-project-document", { body: { documentId: doc.id, projectId: analysed.projectId } });
-          if (!applyError && applied?.applied) {
-            done++;
-            const meaning = String(applied?.commercialRole && applied.commercialRole !== "none" ? applied.commercialRole : applied?.effect || "project evidence").replaceAll("_", " ");
-            update(i, { state: "done", type, project: projectName, message: `Understood and added automatically as ${meaning}.`, href: `/projects/${analysed.projectId}` });
-            continue;
-          }
+        const { data: analysed, error: analyseError } = await supabase.functions.invoke("analyse-intake-document-v3", { body: { documentId: doc.id, batchId: batch.id } });
+        if (analyseError) {
+          const message = await functionErrorMessage(analyseError);
+          await supabase.from("intake_items").update({ status: "needs_review", message }).eq("id", item.id);
           review++;
-          update(i, { state: "review", type, project: projectName, message: applied?.reason === "existing_base_scope" ? "I found an existing base contract. Confirm how this new commercial document relates to it." : "I know the project, but need one confirmation before changing the official record.", href: `/projects/${analysed.projectId}/documents` });
+          update(i, { state: "review", message });
           continue;
         }
-
-        const needsReview = analysed?.status === "needs_review";
-        if (needsReview) review++; else done++;
-        update(i, {
-          state: needsReview ? "review" : "done",
-          type,
-          project: projectName,
-          message: analysed?.message || (needsReview ? "I need one confirmation." : "Understood and organised."),
-          href: analysed?.statementImportId ? `/statements/${analysed.statementImportId}` : analysed?.projectId ? `/projects/${analysed.projectId}/documents` : undefined,
-        });
+        await applyAnalysed(i, doc.id, analysed);
       }
       const processed = done + review + duplicates;
       await supabase.from("intake_batches").update({ processed_files: processed, needs_review_count: review, status: failed === files.length ? "failed" : review ? "needs_review" : "completed", summary: { processed: done, needs_review: review, duplicates, failed } }).eq("id", batch.id);
