@@ -18,12 +18,15 @@ async function runBulk(formData: FormData, resolution: string) {
     target_resolution: resolution,
     target_keyword: keyword,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    redirect(`/statements/${importId}/bulk?error=Unable+to+complete+that+bulk+action.+The+unresolved+rows+are+still+safe+for+review.`);
+  }
 
   revalidatePath(`/statements/${importId}`);
   revalidatePath("/statements");
   revalidatePath("/");
-  redirect(`/statements/${importId}?bulk=${encodeURIComponent(resolution)}&count=${Number((data as any)?.resolved || 0)}#transactions`);
+  const skipped = Number((data as any)?.skipped_incomplete || 0);
+  redirect(`/statements/${importId}?bulk=${encodeURIComponent(resolution)}&count=${Number((data as any)?.resolved || 0)}&skipped=${skipped}#transactions`);
 }
 
 export async function bulkCompanyLevel(formData: FormData) { return runBulk(formData, "company_level"); }

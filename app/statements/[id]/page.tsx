@@ -39,7 +39,7 @@ export default async function StatementReviewPage({params,searchParams}:{params:
   const existingProjects:any[]=Array.isArray(discovery.existing_projects)?discovery.existing_projects:[];
   const candidates:any[]=Array.isArray(discovery.candidates)?discovery.candidates:[];
   const document=Array.isArray((statement as any).document)?(statement as any).document[0]:(statement as any).document;
-  const duplicateNotice=query.duplicate==="1"; const confirmation=typeof query.confirmed==="string"?query.confirmed:undefined;
+  const duplicateNotice=query.duplicate==="1"; const confirmation=typeof query.confirmed==="string"?query.confirmed:undefined; const bulkResolution=typeof query.bulk==="string"?query.bulk:undefined; const bulkCount=Number(typeof query.count==="string"?query.count:"0")||0; const bulkSkipped=Number(typeof query.skipped==="string"?query.skipped:"0")||0;
   const showAnalyse=Number((statement as any).rows_total??0)===0&&["uploaded","failed","needs_review"].includes(String((statement as any).status));
   const totalPages=Math.max(1,Math.ceil(totalFiltered/PAGE_SIZE));
   const autoPosted=Number((statement as any).rows_auto_posted??0); const pendingReview=Number((statement as any).rows_pending_review??0); const known=Number((statement as any).rows_already_known??0); const parserExceptions=Number((statement as any).rows_need_review??0);
@@ -58,6 +58,8 @@ export default async function StatementReviewPage({params,searchParams}:{params:
     {autoPosted>0&&<div className="notice notice-green"><b>{autoPosted.toLocaleString()} transactions posted automatically.</b> They had a unique high-confidence existing-project match. {pendingReview.toLocaleString()} unresolved transactions remain for review.</div>}
     {confirmation==="posted"&&<div className="notice notice-green"><b>Transaction confirmed and posted.</b> Project totals were recalculated.</div>}
     {confirmation==="already"&&<div className="notice notice-amber"><b>Already recorded.</b> This statement row already has a primary accounting transaction.</div>}
+    {bulkResolution&&<div className="notice notice-green"><b>{bulkCount.toLocaleString()} rows resolved.</b> The selected bulk decision was applied successfully.</div>}
+    {bulkSkipped>0&&<div className="notice notice-amber"><b>{bulkSkipped.toLocaleString()} incomplete rows were not posted.</b> Their amount or transaction date is missing, so they remain safely in review.</div>}
     {showAnalyse&&<AnalyseStatementButton importId={id}/>} 
 
     <section className="review-kpis">

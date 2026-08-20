@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "../../../../lib/supabase/server";
 import BulkResolvePanel from "../BulkResolvePanel";
 
-export default async function BulkStatementReviewPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ keyword?: string }> }) {
+export default async function BulkStatementReviewPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ keyword?: string; error?: string }> }) {
   const { id } = await params;
   const query = await searchParams;
   const keyword = String(query.keyword || "").trim();
@@ -44,6 +44,8 @@ export default async function BulkStatementReviewPage({ params, searchParams }: 
           <h1>{statement.detected_institution_name || "Statement"} · {statement.detected_account_name || "Account"}</h1>
           <p>{document?.file_name} · {statement.period_start || "Period unknown"} → {statement.period_end || "—"}</p>
         </header>
+
+        {query.error && <div className="notice notice-amber"><b>Bulk action not completed.</b> {query.error}</div>}
 
         <section className="review-kpis" style={{ marginBottom: 12 }}>
           {[
