@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Charismak Accounting",
+    "slug": "charismak-accounting",
+    "scheme": "charismakaccounting",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router", "expo-document-picker"],
+    "android": {
+      "package": "com.charismakproject.accounting"
+    },
+    "ios": {
+      "bundleIdentifier": "com.charismakproject.accounting"
+    },
+    "extra": {
+      "router": { "origin": false }
+    }
+  }
+}
