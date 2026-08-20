@@ -3,8 +3,24 @@
  * Loaded last so older compact rules cannot reduce essential text below a
  * legible mobile size or collapse financial summaries into inline text.
  */
+@font-face {
+  font-family: "Charismak Sans";
+  src: url("/fonts/charismak-sans-regular-v1.woff") format("woff");
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Charismak Sans";
+  src: url("/fonts/charismak-sans-bold-v1.woff") format("woff");
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}
+
 :root {
-  --font-app: "Roboto", Arial, Helvetica, sans-serif;
+  --font-app: "Charismak Sans", Arial, Helvetica, sans-serif;
   --type-caption: 12px;
   --type-supporting: 14px;
   --type-body: 16px;
