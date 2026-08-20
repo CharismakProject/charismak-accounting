@@ -6,8 +6,9 @@ import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 
 const moreItems = [
+  ["Needs your decision", "/review"],
   ["Money & Treasury", "/treasury"],
-  ["Statements & Reconciliation", "/statements"],
+  ["Money Activity", "/statements"],
   ["Notifications", "/notifications"],
   ["Reports", "/reports"],
 ] as const;
