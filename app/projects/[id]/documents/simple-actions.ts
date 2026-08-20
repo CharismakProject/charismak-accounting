@@ -23,7 +23,11 @@ function interpretation(intel:any,hasRelated:boolean){
   let billingRole="none";
   let effect="reference_only";
   if(kind==="boq"||kind==="quotation"){commercialRole="base_scope";effect="contract_baseline"}
-  if(kind==="variation"){commercialRole=hasRelated?"variation":"additional_scope";billingRole=/invoice/.test(text)?"client_invoice":"none";effect=hasRelated?"variation":"contract_baseline"}
+  if(kind==="variation"){
+    commercialRole=hasRelated?"variation":"additional_scope";
+    billingRole=/invoice/.test(text)?"client_invoice":"none";
+    effect="variation";
+  }
   if(kind==="invoice"){
     billingRole="client_invoice";effect="client_invoice";
     if(/additional|new scope|extra work|revised scope|variation/.test(text))commercialRole=hasRelated?"variation":"additional_scope";
