@@ -12,6 +12,28 @@ async function sha256(file: File) {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+async function functionErrorMessage(error: unknown) {
+  const fallback = error instanceof Error ? error.message : "The document analysis service could not complete this file.";
+  try {
+    const context = (error as { context?: Response } | null)?.context;
+    if (context && typeof context.clone === "function") {
+      const response = context.clone();
+      const payload = await response.json().catch(() => null) as { error?: string; message?: string } | null;
+      if (payload?.error) return payload.error;
+      if (payload?.message) return payload.message;
+      if (context.status === 401) return "Your secure session needs to be refreshed. Sign in again, then retry this file.";
+      if (context.status === 404) return "The document analysis service is not available on this deployment yet.";
+      if (context.status >= 500) return "Charismak could not finish analysing this file. The upload is safe; retry the analysis after the service recovers.";
+    }
+  } catch {
+    // Keep the fallback below if the gateway response could not be read.
+  }
+  return fallback === "Edge Function returned a non-2xx status code"
+    ? "Charismak could not finish analysing this file. The upload is safe; retry the analysis instead of uploading it again."
+    : fallback;
+}
+
 const safe = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_");
 
 export default function UniversalAddClient({ companyId, projects, defaultProjectId = "" }: { companyId: string; projects: ProjectOption[]; defaultProjectId?: string }) {
@@ -59,7 +81,13 @@ export default function UniversalAddClient({ companyId, projects, defaultProject
 
         update(i, { message: "Understanding the document…" });
         const { data: analysed, error: analyseError } = await supabase.functions.invoke("analyse-intake-document", { body: { documentId: doc.id, batchId: batch.id } });
-        if (analyseError) { review++; update(i, { state: "review", message: analyseError.message || "Uploaded, but needs review." }); continue; }
+        if (analyseError) {
+          const message = await functionErrorMessage(analyseError);
+          await supabase.from("intake_items").update({ status: "needs_review", message }).eq("id", item.id);
+          review++;
+          update(i, { state: "review", message });
+          continue;
+        }
 
         const type = String(analysed?.type || "document").replaceAll("_", " ");
         const projectName = analysed?.projectName ? String(analysed.projectName) : undefined;
