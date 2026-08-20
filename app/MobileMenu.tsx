@@ -5,14 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 
-const baseItems = [
-  ["Dashboard", "/"],
-  ["Projects", "/projects"],
-  ["Statements", "/statements"],
-  ["Upload statements", "/statements/upload"],
-  ["Treasury", "/treasury"],
-  ["Approvals", "/approvals"],
+const moreItems = [
+  ["Money & Treasury", "/treasury"],
+  ["Statements & Reconciliation", "/statements"],
   ["Notifications", "/notifications"],
+  ["Reports", "/reports"],
 ] as const;
 
 export default function MobileMenu() {
@@ -26,60 +23,34 @@ export default function MobileMenu() {
       const supabase = createClient();
       const { data: auth } = await supabase.auth.getUser();
       if (!auth.user || !live) return;
-      const { data: membership } = await supabase
-        .from("company_memberships")
-        .select("is_owner")
-        .eq("user_id", auth.user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
+      const { data: membership } = await supabase.from("company_memberships").select("is_owner").eq("user_id", auth.user.id).eq("status", "active").limit(1).maybeSingle();
       if (live) setOwner(Boolean(membership?.is_owner));
     })();
     return () => { live = false; };
   }, []);
 
   useEffect(() => setOpen(false), [pathname]);
-
   if (pathname.startsWith("/login") || pathname.startsWith("/auth")) return null;
 
-  const items = owner
-    ? [...baseItems, ["People & Access", "/admin/access"] as const, ["Audit trail", "/audit"] as const]
-    : baseItems;
+  const secondary = owner
+    ? [...moreItems, ["People & Access", "/admin/access"] as const, ["Audit trail", "/audit"] as const]
+    : moreItems;
+  const active = (href:string) => href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  const isActive = (href:string) => {
-    if (href === "/") return pathname === "/";
-    if (href === "/statements") return pathname.startsWith("/statements") && !pathname.startsWith("/statements/upload");
-    return pathname.startsWith(href);
-  };
+  return <>
+    <nav className="mobile-bottom-nav" aria-label="Main navigation">
+      <Link href="/" className={active("/") ? "active" : ""}><span>⌂</span><b>Home</b></Link>
+      <Link href="/projects" className={active("/projects") ? "active" : ""}><span>▦</span><b>Projects</b></Link>
+      <Link href="/add" className={`mobile-add-tab ${active("/add") ? "active" : ""}`}><span>＋</span><b>Add</b></Link>
+      <Link href="/approvals" className={active("/approvals") ? "active" : ""}><span>✓</span><b>Approvals</b></Link>
+      <button type="button" className={open ? "active" : ""} onClick={() => setOpen(v => !v)}><span>•••</span><b>More</b></button>
+    </nav>
 
-  return (
-    <>
-      <button
-        type="button"
-        className="mobile-menu-trigger"
-        aria-expanded={open}
-        aria-controls="mobile-accounting-menu"
-        onClick={() => setOpen(v => !v)}
-      >
-        <span aria-hidden="true">☰</span>
-        <b>Menu</b>
-      </button>
-
-      {open && <button className="mobile-menu-backdrop" aria-label="Close menu" onClick={() => setOpen(false)} />}
-
-      <aside id="mobile-accounting-menu" className={`mobile-menu-drawer ${open ? "open" : ""}`} aria-hidden={!open}>
-        <div className="mobile-menu-head">
-          <div>
-            <small>CHARISMAK</small>
-            <b>Accounting</b>
-          </div>
-          <button type="button" aria-label="Close menu" onClick={() => setOpen(false)}>×</button>
-        </div>
-        <nav>
-          {items.map(([label, href]) => <Link key={href} href={href} className={isActive(href) ? "active" : ""}>{label}<span>›</span></Link>)}
-        </nav>
-        <p>Same workspace and permissions on phone, tablet and desktop.</p>
-      </aside>
-    </>
-  );
+    {open && <button className="mobile-menu-backdrop" aria-label="Close menu" onClick={() => setOpen(false)} />}
+    <aside className={`mobile-menu-drawer compact-drawer ${open ? "open" : ""}`} aria-hidden={!open}>
+      <div className="mobile-menu-head"><div><small>CHARISMAK</small><b>More</b></div><button type="button" aria-label="Close menu" onClick={() => setOpen(false)}>×</button></div>
+      <nav>{secondary.map(([label,href]) => <Link key={href} href={href} className={active(href) ? "active" : ""}>{label}<span>›</span></Link>)}</nav>
+      <p>Advanced tools stay here so everyday project finance stays simple.</p>
+    </aside>
+  </>;
 }
