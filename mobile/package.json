@@ -1,0 +1,33 @@
+{
+  "name": "charismak-accounting-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "latest",
+    "@supabase/supabase-js": "^2.49.4",
+    "expo": "latest",
+    "expo-constants": "latest",
+    "expo-document-picker": "latest",
+    "expo-linking": "latest",
+    "expo-router": "latest",
+    "expo-status-bar": "latest",
+    "js-sha256": "^0.11.1",
+    "react": "latest",
+    "react-native": "latest",
+    "react-native-safe-area-context": "latest",
+    "react-native-screens": "latest",
+    "react-native-svg": "latest",
+    "react-native-url-polyfill": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "typescript": "latest"
+  }
+}
