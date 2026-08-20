@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -43,4 +43,4 @@ export default function Home(){
     <Pressable style={s.add} onPress={()=>router.push("/(tabs)/add")}><Text style={s.addPlus}>＋</Text><View><Text style={s.addTitle}>Add to Charismak Accounting</Text><Text style={s.addCopy}>Upload statements, invoices, BOQs, receipts or project records together.</Text></View></Pressable>
   </ScrollView></SafeAreaView>;
 }
-const s=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},project:{gap:10},projectCode:{fontSize:9,color:"#1771ab",fontWeight:"900"},projectName:{fontSize:15,fontWeight:"850",color:"#16374f",marginTop:2},projectValue:{fontSize:13,fontWeight:"900",color:"#0a4265"},projectFoot:{flexDirection:"row",justifyContent:"space-between",gap:7},add:{flexDirection:"row",gap:12,alignItems:"center",backgroundColor:"#073f65",padding:15,borderRadius:18,marginTop:4},addPlus:{fontSize:30,color:"white"},addTitle:{fontSize:14,fontWeight:"900",color:"white"},addCopy:{fontSize:10,color:"#c7dae7",marginTop:3,maxWidth:280}});
+const s=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},project:{gap:10},projectCode:{fontSize:9,color:"#1771ab",fontWeight:"900"},projectName:{fontSize:15,fontWeight:"800",color:"#16374f",marginTop:2},projectValue:{fontSize:13,fontWeight:"900",color:"#0a4265"},projectFoot:{flexDirection:"row",justifyContent:"space-between",gap:7},add:{flexDirection:"row",gap:12,alignItems:"center",backgroundColor:"#073f65",padding:15,borderRadius:18,marginTop:4},addPlus:{fontSize:30,color:"white"},addTitle:{fontSize:14,fontWeight:"900",color:"white"},addCopy:{fontSize:10,color:"#c7dae7",marginTop:3,maxWidth:280}});
