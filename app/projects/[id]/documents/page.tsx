@@ -1,71 +1,70 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "../../../../lib/supabase/server";
-import { confirmProjectDocument, retryProjectDocumentAnalysis, uploadProjectDocuments } from "./actions";
+import { uploadProjectDocuments, retryProjectDocumentAnalysis, confirmProjectDocument } from "./actions";
+import { acceptDocumentInterpretation } from "./simple-actions";
 
-const money=(value:number|string|null|undefined)=>value==null||value===""?"—":new Intl.NumberFormat("en-NG",{style:"currency",currency:"NGN",maximumFractionDigits:2}).format(Number(value));
-const label=(v:string|null|undefined)=>String(v||"unknown").replaceAll("_"," ");
-const effectOptions=[
-  ["reference_only","Evidence / reference only"],
-  ["contract_baseline","Client contract / commercial baseline"],
-  ["client_invoice","Client invoice / amount invoiced"],
-  ["variation","Variation / additional work"],
-  ["internal_cost_budget","Internal cost budget"],
-  ["funding_reconciliation_evidence","Funding / retirement evidence"],
-  ["funding_request_evidence","Funding request evidence"],
-  ["supporting_evidence","Other supporting evidence"],
-] as const;
+const money=(v:any)=>v==null?"—":new Intl.NumberFormat("en-NG",{style:"currency",currency:"NGN",maximumFractionDigits:2}).format(Number(v));
+const label=(v:any)=>String(v??"other").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
 
-export default async function ProjectDocumentsPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<Record<string,string|undefined>>}){
-  const {id}=await params;const query=await searchParams;const supabase=await createClient();
-  const {data:{user}}=await supabase.auth.getUser();if(!user)redirect("/login");
-  const {data:membership}=await supabase.from("company_memberships").select("id,company_id,is_owner").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();if(!membership)redirect("/login");
-  const {data:project}=await supabase.from("projects").select("id,company_id,project_code,name,location,status").eq("id",id).eq("company_id",membership.company_id).maybeSingle();if(!project)notFound();
-
-  const [{data:documents},{data:intelligence},{data:applications},{data:positionLinks},{data:permissions}]=await Promise.all([
-    supabase.from("source_documents").select("id,document_type,file_name,storage_path,file_hash,document_date,source_name,amount,metadata,uploaded_at").eq("project_id",id).neq("document_type","bank_statement").order("uploaded_at",{ascending:false}).limit(100),
-    supabase.from("project_document_intelligence").select("*").eq("project_id",id).order("created_at",{ascending:false}),
-    supabase.from("project_document_applications").select("document_id,effect,amount,applied_at").eq("project_id",id),
-    supabase.from("membership_positions").select("position_id").eq("membership_id",membership.id),
-    supabase.from("permissions").select("id,code").in("code",["documents.upload","documents.confirm"]),
-  ]);
-  const permissionIds=(permissions??[]).map((p:any)=>p.id);const positionIds=(positionLinks??[]).map((p:any)=>p.position_id);
-  const [{data:rolePermissions},{data:overrides}]=await Promise.all([
-    positionIds.length&&permissionIds.length?supabase.from("position_permissions").select("permission_id").in("position_id",positionIds).in("permission_id",permissionIds):Promise.resolve({data:[]} as any),
-    permissionIds.length?supabase.from("membership_permission_overrides").select("permission_id,allowed").eq("membership_id",membership.id).in("permission_id",permissionIds):Promise.resolve({data:[]} as any),
-  ]);
-  const permissionMap=new Map((permissions??[]).map((p:any)=>[p.code,p.id]));
-  const has=(code:string)=>{if(membership.is_owner)return true;const pid=permissionMap.get(code);if(!pid)return false;const override=(overrides??[]).find((o:any)=>o.permission_id===pid);if(override)return Boolean(override.allowed);return (rolePermissions??[]).some((r:any)=>r.permission_id===pid)};
-  const canUpload=has("documents.upload"),canConfirm=has("documents.confirm");
-  const intelMap=new Map((intelligence??[]).map((x:any)=>[x.document_id,x]));const appMap=new Map((applications??[]).map((x:any)=>[x.document_id,x]));
-  const docs=await Promise.all((documents??[]).map(async(doc:any)=>{let url:string|null=null;if(doc.storage_path){const bucket=String(doc.metadata?.bucket||"project-documents");const {data}=await supabase.storage.from(bucket).createSignedUrl(doc.storage_path,3600);url=data?.signedUrl??null}return{...doc,url,intel:intelMap.get(doc.id),application:appMap.get(doc.id)}}));
-
-  return <main className="page-shell project-doc-page"><div className="page-wrap">
-    <div className="page-actions"><Link href={`/projects/${id}`}>← Project</Link><Link href="/projects">All Projects</Link><Link href="/">Dashboard</Link></div>
-    <header className="document-hero"><div><small>PROJECT DOCUMENT INTELLIGENCE</small><h1>{project.name}</h1><p>{project.project_code} · {project.location||"Location not set"}. Upload several project documents; the app analyses each one separately and never changes the official project position until an authorised person confirms it.</p></div><div className="document-hero-stat"><b>{docs.length}</b><span>documents attached</span></div></header>
-
-    {(query.uploaded||query.confirmed||query.retry)&&<div className="document-status-banner">{query.uploaded&&<span>{query.uploaded} uploaded · {query.analysed||0} analysed · {query.duplicates||0} duplicate(s) skipped · {query.failed||0} need attention</span>}{query.confirmed&&<span>Document interpretation confirmed and applied.</span>}{query.retry&&<span>Analysis retry: {query.retry}.</span>}</div>}
-
-    <section className="data-card document-upload-card"><div className="section-title"><small>ADD EVIDENCE</small><h2>Upload project documents</h2><p>PDF, Excel, CSV, Word and image files can live under the same project. Text PDF, Excel/CSV and DOCX are analysed automatically in this version; image/scanned files stay attached even when automated extraction needs further visual processing.</p></div>
-      {canUpload?<form action={uploadProjectDocuments} encType="multipart/form-data" className="document-upload-form"><input type="hidden" name="project_id" value={id}/><label className="document-drop"><input type="file" name="documents" multiple required accept=".pdf,.xlsx,.xls,.csv,.docx,.jpg,.jpeg,.png,.webp"/><b>Select one or several files</b><span>Up to 10 at a time · maximum 20 MB each</span></label><button type="submit" className="primary-button">Upload & analyse</button></form>:<p className="document-permission-note">You can review documents for this project, but your current permission set does not allow uploads.</p>}
-    </section>
-
-    <section className="document-explainer"><article><b>1. Keep original</b><span>The uploaded file remains project evidence.</span></article><article><b>2. Interpret</b><span>Type, dates, references, totals and scope are suggested.</span></article><article><b>3. Review</b><span>You correct or choose what the document means.</span></article><article><b>4. Apply</b><span>Only authorised confirmation changes project records.</span></article></section>
-
-    <section className="document-list-head"><div><small>PROJECT FILE</small><h2>Documents & extracted information</h2></div><span>{docs.filter((d:any)=>d.intel?.review_status==="pending").length} awaiting review</span></section>
-    {!docs.length&&<section className="data-card"><p className="empty-state">No project document has been uploaded yet.</p></section>}
-    <div className="document-list">{docs.map((doc:any)=>{const intel=doc.intel;const app=doc.application;const warnings=Array.isArray(intel?.warnings)?intel.warnings:[];const lines=Array.isArray(intel?.extracted_line_items)?intel.extracted_line_items:[];return <article className="document-card" key={doc.id}>
-      <div className="document-card-head"><div><div className="document-badges"><span>{label(intel?.detected_subtype||doc.document_type)}</span>{intel?.confidence!=null&&<span>{Number(intel.confidence).toFixed(0)}% confidence</span>}{app&&<span className="confirmed">confirmed</span>}</div><h3>{intel?.title||doc.file_name}</h3><p>{doc.file_name} · uploaded {new Date(doc.uploaded_at).toLocaleDateString("en-NG")}</p></div>{doc.url&&<a href={doc.url} target="_blank" rel="noreferrer" className="secondary-button">Open original</a>}</div>
-      {intel?.analysis_status==="failed"&&<div className="document-warning"><b>Automatic extraction needs attention</b><span>{warnings[0]||"The original file is safe and still attached."}</span>{canUpload&&<form action={retryProjectDocumentAnalysis}><input type="hidden" name="project_id" value={id}/><input type="hidden" name="document_id" value={doc.id}/><button type="submit">Retry analysis</button></form>}</div>}
-      {intel?.analysis_status==="ready"&&<>
-        <div className="document-fields"><Info k="Detected type" v={label(intel.detected_subtype)}/><Info k="Reference" v={intel.document_reference||"—"}/><Info k="Related document" v={intel.related_reference||"—"}/><Info k="Document date" v={intel.document_date||"—"}/><Info k="Client / source" v={intel.client_name||doc.source_name||"—"}/><Info k="Suggested effect" v={label(intel.suggested_effect)}/><Info k="Subtotal" v={money(intel.subtotal)}/><Info k="Discount" v={money(intel.discount_amount)}/><Info k="VAT" v={money(intel.vat_amount)}/><Info k="Detected total" v={money(intel.grand_total)}/></div>
-        {warnings.length>0&&<div className="document-warning"><b>Review note</b>{warnings.map((w:string,i:number)=><span key={i}>{w}</span>)}</div>}
-        {lines.length>0&&<div className="document-lines"><div className="document-lines-head"><b>Extracted scope / line items</b><span>{lines.length} detected</span></div>{lines.slice(0,6).map((r:any,i:number)=><div className="document-line" key={i}><div><b>{r.item_code?`${r.item_code} · `:""}{String(r.description||"Item").slice(0,150)}</b><small>{r.section||"No section"}{r.unit?` · ${r.unit}`:""}</small></div><strong>{money(r.amount)}</strong></div>)}{lines.length>6&&<p>+ {lines.length-6} more extracted rows. They remain part of the review data.</p>}</div>}
-        {app?<div className="document-applied"><b>Applied as {label(app.effect)}</b><span>{money(app.amount)} · {new Date(app.applied_at).toLocaleDateString("en-NG")}</span></div>:canConfirm?<form action={confirmProjectDocument} className="document-confirm-form"><input type="hidden" name="project_id" value={id}/><input type="hidden" name="document_id" value={doc.id}/><label>What should this document do?<select name="effect" defaultValue={intel.suggested_effect||"reference_only"}>{effectOptions.map(([v,t])=><option key={v} value={v}>{t}</option>)}</select></label><label>Confirmed amount<input name="confirmed_amount" inputMode="decimal" defaultValue={intel.grand_total??""} placeholder="Leave blank if evidence only"/></label>{lines.length>0&&<label className="check-row"><input type="checkbox" name="import_line_items"/><span>Also import these extracted line items when this is confirmed as a contract baseline or internal cost budget.</span></label>}<label className="full">Confirmation note<textarea name="confirmation_notes" rows={2} placeholder="Optional correction, context or approval note"/></label><div className="full document-confirm-foot"><span>Nothing above is posted until you press Confirm & apply.</span><button type="submit" className="primary-button">Confirm & apply</button></div></form>:<p className="document-permission-note">Analysis is available for review. Final application requires document-confirmation authority.</p>}
-      </>}
-      {!intel&&<div className="document-warning"><b>Analysis has not started</b><span>The file is attached. Retry from this page if the analysis record does not appear.</span></div>}
-    </article>})}</div>
-  </div></main>;
+function humanMeaning(intel:any,app:any){
+  if(app){
+    if(app.commercial_role==="base_scope")return "Base project scope";
+    if(app.commercial_role==="additional_scope")return "Additional / new project scope";
+    if(app.commercial_role==="variation")return "Variation to an existing scope";
+    if(app.billing_role==="client_invoice")return "Client invoice";
+    if(app.effect==="funding_reconciliation_evidence")return "Funding / retirement evidence";
+    if(app.effect==="funding_request_evidence")return "Funding request evidence";
+    return "Project evidence";
+  }
+  const k=String(intel?.detected_subtype||"");const t=String(intel?.raw_text_preview||"").toLowerCase();
+  if(k==="boq"||k==="quotation")return "Likely base project scope / commercial proposal";
+  if(k==="variation")return intel?.related_reference?"Likely variation to an earlier scope":"Likely additional / new project scope";
+  if(k==="invoice"&&/additional|new scope|extra work|variation|revised scope/.test(t))return "Likely additional scope and client invoice";
+  if(k==="invoice")return "Likely client invoice";
+  if(k==="fund_retirement")return "Likely project funding / retirement evidence";
+  if(k==="fund_request")return "Likely project funding request";
+  if(k==="receipt"||k==="bill")return "Likely project cost evidence";
+  return "Project document";
 }
 
-function Info({k,v}:{k:string;v:string}){return <div><small>{k}</small><b>{v}</b></div>}
+export default async function ProjectDocumentsPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<Record<string,string|undefined>>}){
+  const {id}=await params;const q=await searchParams;const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser();if(!user)redirect("/login");
+  const {data:project}=await supabase.from("projects").select("id,company_id,project_code,name").eq("id",id).maybeSingle();if(!project)notFound();
+  const [{data:docs},{data:intelRows},{data:apps},{data:commercial}]=await Promise.all([
+    supabase.from("source_documents").select("id,file_name,document_type,amount,uploaded_at,metadata").eq("project_id",id).order("uploaded_at",{ascending:false}),
+    supabase.from("project_document_intelligence").select("*").eq("project_id",id).order("created_at",{ascending:false}),
+    supabase.from("project_document_applications").select("*").eq("project_id",id).order("applied_at",{ascending:false}),
+    supabase.from("project_commercial_positions").select("*").eq("project_id",id).maybeSingle(),
+  ]);
+  const intelBy=new Map((intelRows??[]).map((r:any)=>[r.document_id,r]));const appBy=new Map((apps??[]).map((r:any)=>[r.document_id,r]));
+  const pending=(docs??[]).filter((d:any)=>intelBy.get(d.id)?.review_status!=="confirmed");
+  const confirmed=(docs??[]).filter((d:any)=>intelBy.get(d.id)?.review_status==="confirmed");
+
+  return <main className="simple-shell project-doc-page"><div className="simple-wrap">
+    <div className="simple-top"><Link href={`/projects/${id}`}>← Project overview</Link><Link href="/add">+ Add anything</Link></div>
+    <header className="document-page-head"><span>PROJECT DOCUMENTS</span><h1>{project.name}</h1><p>Upload what you already use. Charismak reads the documents, connects related scopes, and tells you what it thinks each one should change before it becomes official.</p></header>
+
+    <section className="commercial-tree-card">
+      <div><small>Current identified commercial value</small><strong>{money(commercial?.identified_commercial_value)}</strong><p>What the confirmed documents currently say this project is worth.</p></div>
+      <div className="commercial-tree-grid"><span><b>{money(commercial?.base_scope)}</b><small>Base scope</small></span><span><b>{money(commercial?.additional_scope)}</b><small>Additional scope</small></span><span><b>{money(commercial?.variations)}</b><small>Variations</small></span><span><b>{money(commercial?.documented_client_invoices)}</b><small>Client invoices</small></span></div>
+    </section>
+
+    <form action={uploadProjectDocuments} encType="multipart/form-data" className="smart-doc-upload">
+      <input type="hidden" name="project_id" value={id}/><label><input type="file" name="documents" multiple accept=".pdf,.csv,.xlsx,.xls,.docx,.jpg,.jpeg,.png,.webp"/><strong>Add project files</strong><span>Select several files together. PDF, Excel, Word and images are retained as evidence.</span></label><button type="submit">Upload & understand</button>
+    </form>
+    {(q.uploaded||q.accepted)&&<div className="smart-success">{q.accepted?"Document accepted and project position refreshed.":`${q.uploaded||0} document(s) uploaded. Review only the items Charismak could not apply confidently.`}</div>}
+
+    {!!pending.length&&<section className="smart-section"><div className="smart-section-title"><span>NEEDS YOUR EYES</span><h2>{pending.length} item{pending.length===1?"":"s"} need confirmation</h2><p>You should mainly be confirming Charismak's interpretation—not doing the interpretation yourself.</p></div>{pending.map((doc:any)=>{const intel:any=intelBy.get(doc.id);const lines=Array.isArray(intel?.extracted_line_items)?intel.extracted_line_items:[];return <article key={doc.id} className="smart-doc-card">
+      <div className="smart-doc-top"><div><small>{label(intel?.detected_subtype||doc.document_type)} · {Math.round(Number(intel?.confidence||0))}% confidence</small><h3>{intel?.title||doc.file_name}</h3><p>{doc.file_name}</p></div><strong>{money(intel?.grand_total??doc.amount)}</strong></div>
+      {intel?.analysis_status==="failed"?<div className="smart-warning">{(intel?.warnings||[])[0]||"This file was retained, but automatic interpretation needs help."}</div>:<>
+        <div className="what-understood"><span>I think this is</span><strong>{humanMeaning(intel,null)}</strong>{intel?.related_reference&&<p>It appears related to <b>{intel.related_reference}</b>.</p>}{intel?.document_reference&&<p>Reference: {intel.document_reference}</p>}</div>
+        {!!lines.length&&<div className="scope-preview"><small>Scope found</small>{lines.slice(0,4).map((r:any,i:number)=><div key={i}><span>{r.description}</span><b>{money(r.amount)}</b></div>)}{lines.length>4&&<em>+ {lines.length-4} more line items</em>}</div>}
+        <div className="smart-doc-actions"><form action={acceptDocumentInterpretation}><input type="hidden" name="project_id" value={id}/><input type="hidden" name="document_id" value={doc.id}/><button className="accept-meaning" type="submit">Yes, add this to {project.name}</button></form><details><summary>Change interpretation</summary><form action={confirmProjectDocument} className="advanced-doc-form"><input type="hidden" name="project_id" value={id}/><input type="hidden" name="document_id" value={doc.id}/><label>What should it do?<select name="effect" defaultValue={intel?.suggested_effect||"reference_only"}><option value="reference_only">Evidence only</option><option value="contract_baseline">Base / commercial scope</option><option value="client_invoice">Client invoice</option><option value="variation">Variation / additional work</option><option value="internal_cost_budget">Internal cost budget</option><option value="funding_reconciliation_evidence">Funding / retirement evidence</option><option value="funding_request_evidence">Funding request evidence</option><option value="supporting_evidence">Supporting evidence</option></select></label><label>Amount<input name="confirmed_amount" type="number" step="0.01" defaultValue={intel?.grand_total??""}/></label><label className="wide">Note<input name="confirmation_notes" placeholder="Why you changed Charismak's interpretation"/></label><button type="submit">Apply correction</button></form></details></div>
+      </>}
+      {intel?.analysis_status==="failed"&&<form action={retryProjectDocumentAnalysis}><input type="hidden" name="project_id" value={id}/><input type="hidden" name="document_id" value={doc.id}/><button type="submit">Try analysis again</button></form>}
+    </article>})}</section>}
+
+    <section className="smart-section"><div className="smart-section-title"><span>PROJECT RECORD</span><h2>Organised documents</h2><p>These files remain attached as evidence even if an interpretation is later corrected.</p></div>{confirmed.length?confirmed.map((doc:any)=>{const intel:any=intelBy.get(doc.id);const app:any=appBy.get(doc.id);return <article key={doc.id} className="confirmed-doc-row"><div><b>{humanMeaning(intel,app)}</b><span>{doc.file_name}{intel?.document_reference?` · ${intel.document_reference}`:""}</span></div><strong>{money(app?.amount??intel?.grand_total??doc.amount)}</strong></article>}):<div className="smart-empty">No confirmed project documents yet.</div>}</section>
+  </div></main>;
+}
