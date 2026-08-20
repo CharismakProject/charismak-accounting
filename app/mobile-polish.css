@@ -1,0 +1,65 @@
+/* Final responsive polish for phone + tablet. Loaded after mobile-v2.css. */
+@media (max-width: 900px) {
+  html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+  .role-shell { display: block !important; width: 100% !important; min-width: 0 !important; }
+  .role-sidebar { display: none !important; }
+  .role-main { display: block !important; width: 100% !important; min-width: 0 !important; overflow-x: hidden !important; }
+  .role-mobile-top { display: block !important; position: sticky; top: 0; z-index: 80; width: 100%; box-sizing: border-box; background: rgba(255,255,255,.98); border-bottom: 1px solid #dfe7ee; padding: 7px 56px 7px 10px !important; }
+  .role-mobile-brand { display: flex !important; align-items: center; gap: 6px; margin-bottom: 6px !important; }
+  .role-mobile-brand img { width: 24px !important; height: 24px !important; }
+  .role-mobile-brand b { font-size: 9px !important; }
+  .role-mobile-top .role-switcher > small { display: none !important; }
+  .role-mobile-top .role-switch-list { display: grid !important; grid-template-columns: repeat(4,minmax(0,1fr)) !important; gap: 5px !important; width: 100% !important; overflow: visible !important; }
+  .role-mobile-top .role-switch-list button { min-width: 0 !important; height: 44px !important; padding: 4px 2px !important; display: grid !important; grid-template-columns: 1fr !important; gap: 2px !important; border-radius: 9px !important; text-align: center !important; box-shadow: none !important; }
+  .role-mobile-top .role-switch-list button > span { width: 20px !important; height: 20px !important; margin: auto !important; border-radius: 7px !important; font-size: 6.5px !important; }
+  .role-mobile-top .role-switch-list button b { display: block !important; font-size: 6px !important; line-height: 1.05 !important; white-space: normal !important; }
+  .role-mobile-top .role-switch-list button small { display: none !important; }
+
+  .role-content, .page-canvas, .page-wrap, .review-wrap, .content-wrap { width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; overflow-x: hidden !important; }
+  .role-content { padding: 9px 10px 20px !important; gap: 9px !important; }
+  .role-grid, .role-grid-wide, .chart-grid { display: grid !important; grid-template-columns: 1fr !important; width: 100% !important; min-width: 0 !important; gap: 9px !important; }
+  .role-kpis, .role-kpis-5 { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 7px !important; }
+  .role-card, .chart-card, .role-kpi, .finance-workload, .manager-hero { width: 100% !important; max-width: 100% !important; min-width: 0 !important; box-sizing: border-box !important; }
+  .manager-project-switcher { display: flex !important; width: 100% !important; overflow-x: auto !important; gap: 7px !important; padding: 2px 1px 4px !important; }
+  .manager-project-switcher button { min-width: 145px !important; max-width: 190px !important; }
+
+  .mobile-menu-trigger { display: flex !important; left: 10px !important; bottom: max(10px,env(safe-area-inset-bottom)) !important; width: 40px !important; height: 40px !important; padding: 0 !important; border-radius: 50% !important; justify-content: center !important; z-index: 2000 !important; }
+  .mobile-menu-trigger span { font-size: 17px !important; }
+  .mobile-menu-trigger b { display: none !important; }
+  .mobile-menu-drawer { display: flex !important; width: min(62vw,230px) !important; padding: calc(12px + env(safe-area-inset-top)) 9px calc(12px + env(safe-area-inset-bottom)) !important; z-index: 2010 !important; }
+  .mobile-menu-head { padding: 2px 3px 10px !important; }
+  .mobile-menu-head b { font-size: 15px !important; }
+  .mobile-menu-head button { width: 30px !important; height: 30px !important; font-size: 18px !important; }
+  .mobile-menu-drawer nav { gap: 2px !important; margin-top: 8px !important; }
+  .mobile-menu-drawer nav a { padding: 8px 8px !important; font-size: 9px !important; border-radius: 8px !important; }
+  .mobile-menu-drawer nav a span { font-size: 14px !important; }
+  .mobile-menu-drawer > p { font-size: 6.5px !important; padding-top: 10px !important; }
+}
+
+@media (max-width: 700px) {
+  body { padding-bottom: 56px !important; }
+  .role-mobile-top { padding: 6px 52px 6px 8px !important; }
+  .role-mobile-top .role-switch-list button { height: 40px !important; }
+  .role-mobile-top .role-switch-list button > span { width: 18px !important; height: 18px !important; font-size: 6px !important; }
+  .role-mobile-top .role-switch-list button b { font-size: 5.5px !important; }
+  .role-header { padding: 10px 10px 8px !important; }
+  .role-header h1 { font-size: 18px !important; line-height: 1.08 !important; }
+  .role-header p { font-size: 6.5px !important; }
+  .role-header span { font-size: 7px !important; }
+  .role-content { padding: 8px 8px 18px !important; }
+  .role-kpi { padding: 8px !important; }
+  .role-kpi strong { font-size: 12px !important; }
+  .finance-workload, .manager-hero, .role-card, .chart-card { padding: 9px !important; border-radius: 11px !important; }
+  .manager-actions { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 6px !important; }
+  .manager-actions a { padding: 8px 4px !important; font-size: 7px !important; }
+  .mobile-menu-drawer { width: min(66vw,225px) !important; }
+  .page-canvas { padding: 9px 8px 64px !important; }
+  .page-heading.compact h1, .compact-header h1 { font-size: 18px !important; }
+  .notification-bell { width: 38px !important; height: 38px !important; top: 8px !important; right: 8px !important; }
+}
+
+@media (max-width: 430px) {
+  .mobile-menu-drawer { width: min(70vw,220px) !important; }
+  .manager-project-switcher button { min-width: 132px !important; }
+  .role-mobile-top .role-switch-list { gap: 4px !important; }
+}
