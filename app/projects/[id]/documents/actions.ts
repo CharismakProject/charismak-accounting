@@ -6,7 +6,7 @@ import { createClient } from "../../../../lib/supabase/server";
 
 const allowedExtensions=new Set(["pdf","xlsx","xls","csv","docx","jpg","jpeg","png","webp"]);
 const safeFileName=(name:string)=>name.replace(/[^a-zA-Z0-9._-]/g,"_");
-const num=(v:FormDataEntryValue|null)=>{const n=Number(v??"");return Number.isFinite(n)?n:null};
+const num=(v:FormDataEntryValue|null)=>{if(v===null||v==="")return null;const n=Number(v);return Number.isFinite(n)?n:null};
 
 async function context(){
   const supabase=await createClient();
@@ -70,7 +70,9 @@ export async function confirmProjectDocument(formData:FormData){
   if(!allowed.has(effect))throw new Error("Unsupported document effect.");
   const {data:intel}=await supabase.from("project_document_intelligence").select("*,document:source_documents(id,file_name)").eq("document_id",documentId).eq("project_id",projectId).maybeSingle();
   if(!intel)throw new Error("Document analysis not found for this project.");
-  const amount=num(formData.get("confirmed_amount"))??Number(intel.grand_total??0)||null;
+  const enteredAmount=num(formData.get("confirmed_amount"));
+  const detectedAmount=intel.grand_total==null?null:Number(intel.grand_total);
+  const amount=enteredAmount??(detectedAmount!==null&&Number.isFinite(detectedAmount)?detectedAmount:null);
   const notes=String(formData.get("confirmation_notes")||"").trim()||null;
   const importRows=formData.get("import_line_items")==="on";
   const {error:applyError}=await supabase.from("project_document_applications").upsert({company_id:membership.company_id,project_id:projectId,document_id:documentId,effect,amount,applied_data:{detected_subtype:intel.detected_subtype,reference:intel.document_reference,related_reference:intel.related_reference,import_line_items:importRows},applied_by:user.id,applied_at:new Date().toISOString()},{onConflict:"document_id"});
