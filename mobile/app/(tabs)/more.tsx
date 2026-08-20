@@ -19,7 +19,7 @@ export default function More(){
     <Tool title="Money & Treasury" note="Bank accounts, wallets and internal movements" onPress={()=>router.push("/treasury")}/>
     <Tool title="Add records" note="Statements, invoices, BOQs, receipts and other documents" onPress={()=>router.push("/(tabs)/add")}/>
     <Tool title="Notifications" note="Approvals and actions needing attention" onPress={()=>router.push("/notifications")}/>
-    {workspace?.membership?.is_owner&&<><Tool title="People & Access" note="Role emails, positions and project access" onPress={()=>router.push("/people-access")}/><Tool title="Audit trail" note="Who changed what and through which acting role" onPress={()=>router.push("/audit")}/></>}
+    {workspace?.membership?.is_owner&&<><Tool title="Company Branding" note="Logo, letterhead, company details and report colours" onPress={()=>router.push("/company-branding")}/><Tool title="People & Access" note="Role emails, positions and project access" onPress={()=>router.push("/people-access")}/><Tool title="Audit trail" note="Who changed what and through which acting role" onPress={()=>router.push("/audit")}/></>}
     <Pressable style={s.signout} onPress={signOut}><Text style={s.signoutText}>Sign out</Text></Pressable>
   </ScrollView></SafeAreaView>;
 }

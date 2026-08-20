@@ -14,6 +14,8 @@ import "./mobile-polish.css";
 import "./project-documents.css";
 import "./project-nav.css";
 import "./product-simplification.css";
+import "./branding.css";
+import "./reports.css";
 import PwaRegister from "./PwaRegister";
 import NotificationBell from "./NotificationBell";
 import MobileMenu from "./MobileMenu";

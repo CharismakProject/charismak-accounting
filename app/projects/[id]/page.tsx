@@ -50,7 +50,8 @@ export default async function ProjectDetailPage({ params, searchParams }: { para
           <Link href="/">← Dashboard</Link>
           <Link href="/projects">All Projects</Link>
           <Link href="/projects/new">+ New Project</Link>
-          <Link href="/statements/upload">Upload Statements</Link>
+          <Link href="/add">+ Add records</Link>
+          <Link href={`/reports/projects/${id}`}>Branded report</Link>
         </div>
 
         <section className="project-profile-hero">
@@ -179,7 +180,7 @@ export default async function ProjectDetailPage({ params, searchParams }: { para
               <div><small>Assigned team members</small><strong>{(assignments ?? []).length}</strong></div>
             </div>
             {(documents ?? []).slice(0,5).map((doc: any) => <DataRow key={doc.id} label={doc.file_name} value={String(doc.document_type).replaceAll("_", " ")} note={new Date(doc.uploaded_at).toLocaleDateString("en-NG")} />)}
-            <div className="inline-links"><Link href="/statements">Statement history →</Link><Link href="/statements/upload">Upload statements →</Link></div>
+            <div className="inline-links"><Link href="/statements">Statement history →</Link><Link href="/add">Add records →</Link><Link href={`/reports/projects/${id}`}>Branded report →</Link></div>
           </article>
         </section>
 

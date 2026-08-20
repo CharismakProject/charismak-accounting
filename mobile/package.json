@@ -10,24 +10,24 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "latest",
-    "@supabase/supabase-js": "^2.49.4",
-    "expo": "latest",
-    "expo-constants": "latest",
-    "expo-document-picker": "latest",
-    "expo-linking": "latest",
-    "expo-router": "latest",
-    "expo-status-bar": "latest",
-    "js-sha256": "^0.11.1",
-    "react": "latest",
-    "react-native": "latest",
-    "react-native-safe-area-context": "latest",
-    "react-native-screens": "latest",
-    "react-native-svg": "latest",
-    "react-native-url-polyfill": "latest"
+    "@react-native-async-storage/async-storage": "3.1.1",
+    "@supabase/supabase-js": "2.112.3",
+    "expo": "57.0.14",
+    "expo-constants": "57.0.12",
+    "expo-document-picker": "57.0.1",
+    "expo-linking": "57.0.6",
+    "expo-router": "57.0.14",
+    "expo-status-bar": "57.0.1",
+    "js-sha256": "0.11.1",
+    "react": "19.2.8",
+    "react-native": "0.86.2",
+    "react-native-safe-area-context": "5.9.1",
+    "react-native-screens": "4.27.0",
+    "react-native-svg": "15.15.5",
+    "react-native-url-polyfill": "4.0.0"
   },
   "devDependencies": {
-    "@types/react": "latest",
-    "typescript": "latest"
+    "@types/react": "19.2.18",
+    "typescript": "7.0.2"
   }
 }

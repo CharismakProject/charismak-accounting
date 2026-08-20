@@ -19,7 +19,7 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
       - name: Install web dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Web type check
         run: npx tsc --noEmit
       - name: Web production build
@@ -39,6 +39,6 @@ jobs:
         with:
           node-version: 22
       - name: Install native dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Native type check
         run: npm run typecheck
