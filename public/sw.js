@@ -1,4 +1,4 @@
-const CACHE = "charismak-accounting-static-v2";
+const CACHE = "charismak-accounting-static-v3";
 const CACHE_FIRST = new Set(["image", "font"]);
 const NETWORK_FIRST = new Set(["style", "script"]);
 
@@ -20,7 +20,7 @@ self.addEventListener("fetch", (event) => {
   if (NETWORK_FIRST.has(request.destination)) {
     event.respondWith((async () => {
       try {
-        const fresh = await fetch(request);
+        const fresh = await fetch(request, { cache: "no-store" });
         if (fresh.ok) {
           const cache = await caches.open(CACHE);
           cache.put(request, fresh.clone());

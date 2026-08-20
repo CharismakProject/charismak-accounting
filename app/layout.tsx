@@ -10,6 +10,7 @@ import "./workflow-enhancements.css";
 import "./mobile-menu.css";
 import "./chart-enhancements.css";
 import "./mobile-v2.css";
+import "./mobile-polish.css";
 import PwaRegister from "./PwaRegister";
 import NotificationBell from "./NotificationBell";
 import MobileMenu from "./MobileMenu";
