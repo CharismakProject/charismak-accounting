@@ -16,6 +16,7 @@ import "./project-nav.css";
 import "./product-simplification.css";
 import "./branding.css";
 import "./reports.css";
+import "./typography-system.css";
 import PwaRegister from "./PwaRegister";
 import NotificationBell from "./NotificationBell";
 import MobileMenu from "./MobileMenu";
