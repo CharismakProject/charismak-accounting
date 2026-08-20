@@ -1,5 +1,6 @@
 /* Small/medium contractor product simplification. Loaded last. */
 .role-nav a[href="/statements/upload"]{display:none!important}
+.android-download-card{display:none!important}
 .global-add-button{position:fixed;right:68px;top:11px;z-index:1200;display:flex;align-items:center;gap:5px;height:34px;padding:0 11px;border-radius:12px;background:#073f65;color:#fff;text-decoration:none;box-shadow:0 8px 22px rgba(7,63,101,.18)}
 .global-add-button span{font-size:17px;line-height:1}.global-add-button b{font-size:9px;letter-spacing:.01em}
 .mobile-acting-as{display:none}
