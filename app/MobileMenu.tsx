@@ -60,7 +60,7 @@ export default function MobileMenu() {
   }
 
   const secondary = owner
-    ? [...moreItems, ["People & Access", "/admin/access"] as const, ["Audit trail", "/audit"] as const]
+    ? [...moreItems, ["Company Branding", "/company/branding"] as const, ["People & Access", "/admin/access"] as const, ["Audit trail", "/audit"] as const]
     : moreItems;
   const active = (href:string) => href === "/" ? pathname === "/" : pathname.startsWith(href);
 
