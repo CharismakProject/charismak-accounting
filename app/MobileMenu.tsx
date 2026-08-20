@@ -9,8 +9,9 @@ type RoleFamily="md_owner"|"accountant_cfo"|"project_director"|"project_manager"
 const roleLabel:Record<RoleFamily,string>={md_owner:"MD / Owner",accountant_cfo:"Accountant / CFO",project_director:"Project Director",project_manager:"Project / Construction Manager"};
 const allRoles:RoleFamily[]=["md_owner","accountant_cfo","project_director","project_manager"];
 const moreItems = [
+  ["Needs your decision", "/review"],
   ["Money & Treasury", "/treasury"],
-  ["Records & Reconciliation", "/statements"],
+  ["Money Activity", "/statements"],
   ["Notifications", "/notifications"],
   ["Reports", "/reports"],
 ] as const;
