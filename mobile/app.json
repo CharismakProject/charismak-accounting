@@ -4,14 +4,15 @@
     "slug": "charismak-accounting",
     "scheme": "charismakaccounting",
     "version": "0.1.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "light",
     "plugins": ["expo-router", "expo-document-picker"],
     "android": {
       "package": "com.charismakproject.accounting"
     },
     "ios": {
-      "bundleIdentifier": "com.charismakproject.accounting"
+      "bundleIdentifier": "com.charismakproject.accounting",
+      "supportsTablet": true
     },
     "extra": {
       "router": { "origin": false }
