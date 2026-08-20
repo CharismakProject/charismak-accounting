@@ -17,6 +17,7 @@ import "./product-simplification.css";
 import PwaRegister from "./PwaRegister";
 import NotificationBell from "./NotificationBell";
 import MobileMenu from "./MobileMenu";
+import GlobalAddButton from "./GlobalAddButton";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <PwaRegister />
         <NotificationBell />
+        <GlobalAddButton />
         <MobileMenu />
         {children}
       </body>
