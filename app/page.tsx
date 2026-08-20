@@ -32,13 +32,20 @@ export default async function Home() {
   const initialRole: RoleFamily = preferred && availableRoles.includes(preferred) ? preferred : membership.is_owner ? "md_owner" : availableRoles[0];
   const primaryRow: any = (positionRows ?? []).find((row: any) => row.is_primary) ?? (positionRows ?? [])[0];
   const signedInRole = membership.is_owner ? "MD / Owner" : primaryRow?.position?.name ?? "Company member";
-  const managerProjectIds = (assignments ?? []).map((row: any) => row.project_id);
+  const assignedProjectIds = Array.from(new Set((assignments ?? []).map((row: any) => row.project_id).filter(Boolean))) as string[];
+  const projectScopedMember = !membership.is_owner && !assignedFamilies.includes("accountant_cfo");
 
-  const projectQuery = supabase
+  let projectQuery = supabase
     .from("projects")
     .select("id,project_code,name,location,status,progress_percent,contract_value,internal_cost_budget,project_image_path,created_at,summary:project_financial_summaries(funding_received,company_funding,other_financing,confirmed_expenditure,cash_balance,outstanding_commitments,funding_surplus_shortfall,revised_budget,forecast_cost_to_complete,forecast_final_cost,expected_contract_revenue,forecast_profit,reporting_period_start,reporting_period_end)")
     .eq("company_id", membership.company_id)
     .neq("status", "archived");
+
+  if (projectScopedMember) {
+    projectQuery = assignedProjectIds.length
+      ? projectQuery.in("id", assignedProjectIds)
+      : projectQuery.in("id", ["00000000-0000-0000-0000-000000000000"]);
+  }
 
   const [projectResult, accountResult, approvalResult, statementResult, transactionResult, auditResult] = await Promise.all([
     projectQuery,
@@ -59,6 +66,13 @@ export default async function Home() {
     });
 
   const projectIds = projects.map((p: any) => p.id);
+  const visibleApprovals = projectScopedMember
+    ? (approvalResult.data ?? []).filter((row: any) => row.project_id && projectIds.includes(row.project_id))
+    : (approvalResult.data ?? []);
+  const visibleTransactions = projectScopedMember
+    ? (transactionResult.data ?? []).filter((row: any) => row.project_id && projectIds.includes(row.project_id))
+    : (transactionResult.data ?? []);
+
   const [{ data: imprests }, { data: costCategories }] = projectIds.length
     ? await Promise.all([
         supabase.from("imprest_accounts").select("id,project_id,name,approved_limit,current_balance,status").in("project_id", projectIds).eq("status", "active"),
@@ -75,12 +89,12 @@ export default async function Home() {
       isOwner={Boolean(membership.is_owner)}
       initialRole={initialRole}
       availableRoles={availableRoles}
-      managerProjectIds={managerProjectIds}
+      managerProjectIds={assignedProjectIds}
       projects={projects}
       accounts={accountResult.data ?? []}
-      approvals={approvalResult.data ?? []}
+      approvals={visibleApprovals}
       statements={statementResult.data ?? []}
-      transactions={transactionResult.data ?? []}
+      transactions={visibleTransactions}
       auditRows={auditResult.data ?? []}
       imprests={imprests ?? []}
       costCategories={costCategories ?? []}
