@@ -14,10 +14,10 @@ async function sha256(file: File) {
 }
 const safe = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_");
 
-export default function UniversalAddClient({ companyId, projects }: { companyId: string; projects: ProjectOption[] }) {
+export default function UniversalAddClient({ companyId, projects, defaultProjectId = "" }: { companyId: string; projects: ProjectOption[]; defaultProjectId?: string }) {
   const supabase = useMemo(() => createClient(), []);
   const [files, setFiles] = useState<File[]>([]);
-  const [projectHint, setProjectHint] = useState("");
+  const [projectHint, setProjectHint] = useState(defaultProjectId);
   const [results, setResults] = useState<Result[]>([]);
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState("");
@@ -63,26 +63,24 @@ export default function UniversalAddClient({ companyId, projects }: { companyId:
 
         const type = String(analysed?.type || "document").replaceAll("_", " ");
         const projectName = analysed?.projectName ? String(analysed.projectName) : undefined;
-        const statementHref = analysed?.statementImportId ? `/statements/${analysed.statementImportId}` : undefined;
-        const projectHref = analysed?.projectId ? `/projects/${analysed.projectId}` : undefined;
 
         if (analysed?.statementImportId && analysed?.status === "applied") {
           done++;
-          update(i, { state: "done", type, message: analysed?.message || "Statement understood and processed.", href: statementHref });
+          update(i, { state: "done", type: "bank statement", message: analysed?.message || "Statement understood and processed.", href: `/statements/${analysed.statementImportId}` });
           continue;
         }
 
         if (analysed?.projectId && analysed?.status === "ready") {
-          update(i, { message: `Matched to ${projectName || "project"}. Applying safe interpretation…` });
+          update(i, { message: "Project understood. Applying the safe interpretation…" });
           const { data: applied, error: applyError } = await supabase.functions.invoke("auto-apply-project-document", { body: { documentId: doc.id, projectId: analysed.projectId } });
           if (!applyError && applied?.applied) {
             done++;
             const meaning = String(applied?.commercialRole && applied.commercialRole !== "none" ? applied.commercialRole : applied?.effect || "project evidence").replaceAll("_", " ");
-            update(i, { state: "done", type, project: projectName, message: `Understood and added to ${projectName || "the project"} as ${meaning}.`, href: `/projects/${analysed.projectId}/documents` });
+            update(i, { state: "done", type, project: projectName, message: `Understood and added automatically as ${meaning}.`, href: `/projects/${analysed.projectId}` });
             continue;
           }
           review++;
-          update(i, { state: "review", type, project: projectName, message: applied?.reason === "existing_base_scope" ? "I found an existing base contract, so I need you to confirm how this new commercial document should relate to it." : "I matched the project, but I need one confirmation before changing the official project record.", href: `/projects/${analysed.projectId}/documents` });
+          update(i, { state: "review", type, project: projectName, message: applied?.reason === "existing_base_scope" ? "I found an existing base contract. Confirm how this new commercial document relates to it." : "I know the project, but need one confirmation before changing the official record.", href: `/projects/${analysed.projectId}/documents` });
           continue;
         }
 
@@ -92,8 +90,8 @@ export default function UniversalAddClient({ companyId, projects }: { companyId:
           state: needsReview ? "review" : "done",
           type,
           project: projectName,
-          message: analysed?.message || (needsReview ? "I need one confirmation." : "Understood and processed."),
-          href: statementHref || projectHref,
+          message: analysed?.message || (needsReview ? "I need one confirmation." : "Understood and organised."),
+          href: analysed?.statementImportId ? `/statements/${analysed.statementImportId}` : analysed?.projectId ? `/projects/${analysed.projectId}/documents` : undefined,
         });
       }
       const processed = done + review + duplicates;
@@ -109,8 +107,8 @@ export default function UniversalAddClient({ companyId, projects }: { companyId:
   return <div className="universal-add">
     <section className="add-hero">
       <span>ADD TO CHARISMAK ACCOUNTING</span>
-      <h1>Give Charismak the records. Let it organise the work.</h1>
-      <p>Select the files you already use—bank statements, invoices, BOQs, quotations, receipts, fund records and project documents. Charismak identifies what each file is, where it belongs and what it should update.</p>
+      <h1>Give Charismak your records.</h1>
+      <p>Select what you already use. Statements, invoices, BOQs, quotations, receipts and project documents can be mixed together. Charismak decides what each file is, where it belongs and what it should update.</p>
     </section>
 
     <section className="add-card">
@@ -120,13 +118,13 @@ export default function UniversalAddClient({ companyId, projects }: { companyId:
         <span>Mix different document types in the same upload · up to 20 MB each</span>
       </label>
       <div className="add-hint-row">
-        <label><span>Optional: tell me the project</span><select value={projectHint} onChange={(e) => setProjectHint(e.target.value)}><option value="">Let Charismak work it out</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label>
+        <label><span>Already know the project? <small>Optional</small></span><select value={projectHint} onChange={(e) => setProjectHint(e.target.value)}><option value="">Let Charismak detect it</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label>
         <button className="add-primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Understanding your records…" : "Add & organise"}</button>
       </div>
     </section>
 
     {!!results.length && <section className="intake-results">
-      <div className="intake-summary"><h2>What Charismak understood</h2><p>{summary || "Processing your files…"}</p></div>
+      <div className="intake-summary"><h2>What Charismak did</h2><p>{summary || "Processing your files…"}</p></div>
       {results.map((r, i) => <article key={`${r.name}-${i}`} className={`intake-result ${r.state}`}>
         <div className="intake-icon">{r.state === "done" ? "✓" : r.state === "review" ? "?" : r.state === "duplicate" ? "↺" : r.state === "failed" ? "!" : "…"}</div>
         <div className="intake-copy"><strong>{r.name}</strong><div className="intake-tags">{r.type && <span>{r.type}</span>}{r.project && <span>{r.project}</span>}</div><p>{r.message}</p></div>

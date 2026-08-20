@@ -18,7 +18,6 @@ export default async function ReviewInbox(){
     supabase.from("project_document_intelligence").select("id,document_id,project_id,detected_subtype,confidence,grand_total,title,warnings,created_at,project:projects(name,project_code),document:source_documents(file_name)").eq("company_id",membership.company_id).eq("review_status","pending").order("created_at",{ascending:false}).limit(100),
   ]);
 
-  const statementIds=new Set((statements??[]).map((r:any)=>r.id));
   const projectDocIds=new Set((docs??[]).map((r:any)=>r.document_id));
   const intakeOnly=(intake??[]).filter((r:any)=>!projectDocIds.has(r.document_id));
   const total=intakeOnly.length+(statements??[]).length+(docs??[]).length;

@@ -1,0 +1,22 @@
+/* Small/medium contractor product simplification. Loaded last. */
+.role-nav a[href="/statements/upload"]{display:none!important}
+.global-add-button{position:fixed;right:68px;top:11px;z-index:1200;display:flex;align-items:center;gap:5px;height:34px;padding:0 11px;border-radius:12px;background:#073f65;color:#fff;text-decoration:none;box-shadow:0 8px 22px rgba(7,63,101,.18)}
+.global-add-button span{font-size:17px;line-height:1}.global-add-button b{font-size:9px;letter-spacing:.01em}
+.mobile-acting-as{display:none}
+@media (max-width:900px){
+  .global-add-button{display:none!important}
+  .role-mobile-top .role-switcher{display:none!important}
+  .role-mobile-top{min-height:42px!important;padding:8px 54px 8px 10px!important}
+  .role-mobile-brand{margin-bottom:0!important}
+  .mobile-acting-as{display:block;margin:9px 2px 8px;padding:9px;border-radius:10px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1)}
+  .mobile-acting-as>small{display:block;font-size:6px;letter-spacing:.15em;color:#88a9bd}
+  .mobile-acting-as>strong{display:block;margin-top:3px;font-size:10px;color:#fff}
+  .mobile-acting-as>div{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+  .mobile-acting-as button{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:#cfe0ea;border-radius:999px;padding:5px 7px;font-size:6.5px;font-weight:800}
+  .mobile-acting-as button.active{background:#fff;color:#082945;border-color:#fff}
+  .mobile-acting-as button:disabled{opacity:.55}
+  .add-hero h1{font-size:22px!important;line-height:1.08!important}
+  .add-hero p{max-width:560px!important}
+  .intake-result{grid-template-columns:34px minmax(0,1fr)!important}
+  .intake-open{grid-column:2!important;justify-self:start!important}
+}

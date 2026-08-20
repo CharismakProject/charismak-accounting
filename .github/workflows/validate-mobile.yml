@@ -1,0 +1,21 @@
+name: Validate mobile app
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/validate-mobile.yml'
+
+jobs:
+  mobile-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm run typecheck
