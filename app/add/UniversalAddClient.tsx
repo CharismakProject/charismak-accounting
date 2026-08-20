@@ -56,11 +56,36 @@ export default function UniversalAddClient({ companyId, projects }: { companyId:
         if (docError || !doc) { await supabase.storage.from("universal-intake").remove([path]); failed++; update(i, { state: "failed", message: docError?.message || "Could not register file." }); continue; }
         const { data: item, error: itemError } = await supabase.from("intake_items").insert({ batch_id: batch.id, company_id: companyId, document_id: doc.id, detected_project_id: projectHint || null }).select("id").single();
         if (itemError || !item) { failed++; update(i, { state: "failed", message: itemError?.message || "Could not create intake item." }); continue; }
+
         update(i, { message: "Understanding the document…" });
         const { data: analysed, error: analyseError } = await supabase.functions.invoke("analyse-intake-document", { body: { documentId: doc.id, batchId: batch.id } });
         if (analyseError) { review++; update(i, { state: "review", message: analyseError.message || "Uploaded, but needs review." }); continue; }
+
         const type = String(analysed?.type || "document").replaceAll("_", " ");
         const projectName = analysed?.projectName ? String(analysed.projectName) : undefined;
+        const statementHref = analysed?.statementImportId ? `/statements/${analysed.statementImportId}` : undefined;
+        const projectHref = analysed?.projectId ? `/projects/${analysed.projectId}` : undefined;
+
+        if (analysed?.statementImportId && analysed?.status === "applied") {
+          done++;
+          update(i, { state: "done", type, message: analysed?.message || "Statement understood and processed.", href: statementHref });
+          continue;
+        }
+
+        if (analysed?.projectId && analysed?.status === "ready") {
+          update(i, { message: `Matched to ${projectName || "project"}. Applying safe interpretation…` });
+          const { data: applied, error: applyError } = await supabase.functions.invoke("auto-apply-project-document", { body: { documentId: doc.id, projectId: analysed.projectId } });
+          if (!applyError && applied?.applied) {
+            done++;
+            const meaning = String(applied?.commercialRole && applied.commercialRole !== "none" ? applied.commercialRole : applied?.effect || "project evidence").replaceAll("_", " ");
+            update(i, { state: "done", type, project: projectName, message: `Understood and added to ${projectName || "the project"} as ${meaning}.`, href: `/projects/${analysed.projectId}/documents` });
+            continue;
+          }
+          review++;
+          update(i, { state: "review", type, project: projectName, message: applied?.reason === "existing_base_scope" ? "I found an existing base contract, so I need you to confirm how this new commercial document should relate to it." : "I matched the project, but I need one confirmation before changing the official project record.", href: `/projects/${analysed.projectId}/documents` });
+          continue;
+        }
+
         const needsReview = analysed?.status === "needs_review";
         if (needsReview) review++; else done++;
         update(i, {
@@ -68,12 +93,12 @@ export default function UniversalAddClient({ companyId, projects }: { companyId:
           type,
           project: projectName,
           message: analysed?.message || (needsReview ? "I need one confirmation." : "Understood and processed."),
-          href: analysed?.statementImportId ? `/statements/${analysed.statementImportId}` : analysed?.projectId ? `/projects/${analysed.projectId}/documents` : undefined,
+          href: statementHref || projectHref,
         });
       }
       const processed = done + review + duplicates;
       await supabase.from("intake_batches").update({ processed_files: processed, needs_review_count: review, status: failed === files.length ? "failed" : review ? "needs_review" : "completed", summary: { processed: done, needs_review: review, duplicates, failed } }).eq("id", batch.id);
-      setSummary(`${done} processed automatically · ${review} need your help · ${duplicates} already known · ${failed} failed`);
+      setSummary(`${done} organised automatically · ${review} need your decision · ${duplicates} already known · ${failed} failed`);
     } catch (e) {
       setSummary(e instanceof Error ? e.message : "The batch could not be processed.");
     } finally {
@@ -84,8 +109,8 @@ export default function UniversalAddClient({ companyId, projects }: { companyId:
   return <div className="universal-add">
     <section className="add-hero">
       <span>ADD TO CHARISMAK ACCOUNTING</span>
-      <h1>Upload what you already use.</h1>
-      <p>Statements, invoices, BOQs, quotations, receipts and project documents can be selected together. The app decides what each file is and where it belongs.</p>
+      <h1>Give Charismak the records. Let it organise the work.</h1>
+      <p>Select the files you already use—bank statements, invoices, BOQs, quotations, receipts, fund records and project documents. Charismak identifies what each file is, where it belongs and what it should update.</p>
     </section>
 
     <section className="add-card">
@@ -95,13 +120,13 @@ export default function UniversalAddClient({ companyId, projects }: { companyId:
         <span>Mix different document types in the same upload · up to 20 MB each</span>
       </label>
       <div className="add-hint-row">
-        <label><span>Optional shortcut</span><select value={projectHint} onChange={(e) => setProjectHint(e.target.value)}><option value="">Let Charismak detect the project</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label>
-        <button className="add-primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Understanding files…" : "Add & organise"}</button>
+        <label><span>Optional: tell me the project</span><select value={projectHint} onChange={(e) => setProjectHint(e.target.value)}><option value="">Let Charismak work it out</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label>
+        <button className="add-primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Understanding your records…" : "Add & organise"}</button>
       </div>
     </section>
 
     {!!results.length && <section className="intake-results">
-      <div className="intake-summary"><h2>What I understood</h2><p>{summary || "Processing your files…"}</p></div>
+      <div className="intake-summary"><h2>What Charismak understood</h2><p>{summary || "Processing your files…"}</p></div>
       {results.map((r, i) => <article key={`${r.name}-${i}`} className={`intake-result ${r.state}`}>
         <div className="intake-icon">{r.state === "done" ? "✓" : r.state === "review" ? "?" : r.state === "duplicate" ? "↺" : r.state === "failed" ? "!" : "…"}</div>
         <div className="intake-copy"><strong>{r.name}</strong><div className="intake-tags">{r.type && <span>{r.type}</span>}{r.project && <span>{r.project}</span>}</div><p>{r.message}</p></div>
