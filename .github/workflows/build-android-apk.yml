@@ -1,0 +1,81 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/build-android-apk.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-beta-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and publish Android beta
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Prepare branded application icon
+        run: |
+          mkdir -p mobile/assets
+          curl --fail --location --silent --show-error \
+            https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png \
+            --output /tmp/charismak-logo.png
+          convert /tmp/charismak-logo.png -resize 760x760 -background white -gravity center -extent 1024x1024 mobile/assets/icon.png
+
+      - name: Generate Android project
+        working-directory: mobile
+        env:
+          CI: "1"
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Build standalone release APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Prepare downloadable file
+        run: cp mobile/android/app/build/outputs/apk/release/app-release.apk Charismak-Accounting-Android.apk
+
+      - name: Retain build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Charismak-Accounting-Android
+          path: Charismak-Accounting-Android.apk
+          retention-days: 30
+
+      - name: Publish stable Android beta download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --cleanup-tag --yes || true
+          gh release create android-latest Charismak-Accounting-Android.apk \
+            --title "Charismak Accounting Android Beta" \
+            --notes "Native Android beta. Uses the same live Charismak Accounting account, projects and permissions as the web workspace." \
+            --latest

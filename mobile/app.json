@@ -4,15 +4,19 @@
     "slug": "charismak-accounting",
     "scheme": "charismakaccounting",
     "version": "0.1.0",
-    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": ["expo-router", "expo-document-picker"],
     "android": {
-      "package": "com.charismakproject.accounting"
+      "package": "com.charismakproject.accounting",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "ios": {
-      "bundleIdentifier": "com.charismakproject.accounting",
-      "supportsTablet": true
+      "bundleIdentifier": "com.charismakproject.accounting"
     },
     "extra": {
       "router": { "origin": false }

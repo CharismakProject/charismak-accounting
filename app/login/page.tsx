@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 
 const LOGO_URL = "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png";
+const ANDROID_APK_URL = "https://github.com/CharismakProject/charismak-accounting/releases/download/android-latest/Charismak-Accounting-Android.apk";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -104,6 +105,12 @@ export default function LoginPage() {
             </button>
           )}
         </form>
+
+        <div style={{ borderTop: "1px solid #e3e9ef", marginTop: 22, paddingTop: 18, display: "grid", gap: 8 }}>
+          <b style={{ color: "#102942", fontSize: 14 }}>Using an Android phone?</b>
+          <span style={{ color: "#728296", fontSize: 12, lineHeight: 1.5 }}>Install the native Charismak Accounting app for a phone-first experience.</span>
+          <a href={ANDROID_APK_URL} style={{ border: "1px solid #bfd0df", borderRadius: 12, padding: 12, background: "#edf5fb", color: "#0b4f82", textAlign: "center", textDecoration: "none", fontSize: 13, fontWeight: 850 }}>Download Android App</a>
+        </div>
       </section>
     </main>
   );

@@ -7,6 +7,7 @@ import { createClient } from "../lib/supabase/client";
 export type RoleFamily = "md_owner" | "accountant_cfo" | "project_director" | "project_manager";
 
 const LOGO_URL = "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png";
+const ANDROID_APK_URL = "https://github.com/CharismakProject/charismak-accounting/releases/download/android-latest/Charismak-Accounting-Android.apk";
 const money = (value: number | string | null | undefined) => value == null ? "—" : new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(Number(value));
 const compactMoney = (value: number) => `₦${new Intl.NumberFormat("en-NG", { notation: "compact", maximumFractionDigits: 1 }).format(Math.abs(value || 0))}`;
 
@@ -76,7 +77,11 @@ export default function DashboardClient(props:Props){
       {roleError&&<p className="role-switch-error">{roleError}</p>}
       <div className="role-signed-in"><small>SIGNED IN AS</small><b>{signedInRole}</b><span>{userEmail}</span></div>
       <RoleNav active={active} owner={isOwner}/>
-      <div className="pwa-install-note">Desktop workspace for detailed finance and reporting.</div>
+      <div className="android-download-card">
+        <b>Android mobile app</b>
+        <span>Use the simpler native app for work on your phone.</span>
+        <a href={ANDROID_APK_URL}>Download Android APK</a>
+      </div>
       <div className="role-truth">✓ Track the truth<br/><span>Every movement. Every project.</span></div>
     </aside>
     <section className="role-main">
