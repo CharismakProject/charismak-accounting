@@ -76,7 +76,7 @@ export default function DashboardClient(props:Props){
       {roleError&&<p className="role-switch-error">{roleError}</p>}
       <div className="role-signed-in"><small>SIGNED IN AS</small><b>{signedInRole}</b><span>{userEmail}</span></div>
       <RoleNav active={active} owner={isOwner}/>
-      <div className="pwa-install-note">Same workspace and permissions on desktop, tablet and phone.</div>
+      <div className="pwa-install-note">Desktop workspace for detailed finance and reporting.</div>
       <div className="role-truth">✓ Track the truth<br/><span>Every movement. Every project.</span></div>
     </aside>
     <section className="role-main">
@@ -94,8 +94,8 @@ function RoleButtons({active,available,onChange}:{active:RoleFamily;available:Ro
 }
 
 function RoleNav({active,owner}:{active:RoleFamily;owner:boolean}){
-  if(active==="md_owner")return <nav className="role-nav"><Link className="active" href="/">Executive</Link><Link href="/notifications">Notifications</Link><Link href="/projects">Projects</Link><Link href="/statements">Transactions & Statements</Link><Link href="/statements/upload">Upload Statements</Link><Link href="/treasury">Treasury</Link><Link href="/approvals">Approvals</Link>{owner&&<Link href="/admin/access">People & Access</Link>}<Link href="/audit">Audit Trail</Link></nav>;
-  if(active==="accountant_cfo")return <nav className="role-nav"><Link className="active" href="/">Finance Home</Link><Link href="/notifications">Notifications</Link><Link href="/statements">Transaction Inbox</Link><Link href="/statements/upload">Upload Statements</Link><Link href="/treasury">Banking & Treasury</Link><Link href="/approvals">Payments & Approvals</Link><Link href="/projects">Projects</Link></nav>;
+  if(active==="md_owner")return <nav className="role-nav"><Link className="active" href="/">Executive</Link><Link href="/notifications">Notifications</Link><Link href="/projects">Projects</Link><Link href="/statements">Transactions & Statements</Link><Link href="/add">Add / Upload Records</Link><Link href="/treasury">Treasury</Link><Link href="/approvals">Approvals</Link>{owner&&<Link href="/admin/access">People & Access</Link>}<Link href="/audit">Audit Trail</Link></nav>;
+  if(active==="accountant_cfo")return <nav className="role-nav"><Link className="active" href="/">Finance Home</Link><Link href="/notifications">Notifications</Link><Link href="/statements">Transaction Inbox</Link><Link href="/add">Add / Upload Records</Link><Link href="/treasury">Banking & Treasury</Link><Link href="/approvals">Payments & Approvals</Link><Link href="/projects">Projects</Link></nav>;
   if(active==="project_director")return <nav className="role-nav"><Link className="active" href="/">Portfolio</Link><Link href="/notifications">Notifications</Link><Link href="/projects">Cost Control</Link><Link href="/approvals">Commitments & Approvals</Link><Link href="/statements">Transactions</Link><Link href="/audit">Reports & Audit</Link></nav>;
   return <nav className="role-nav"><Link className="active" href="/">Projects</Link><Link href="/notifications">Notifications</Link><Link href="/projects">Site & Project</Link><Link href="/approvals">Requests</Link><Link href="/statements">Expenses</Link></nav>;
 }

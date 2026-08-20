@@ -40,6 +40,10 @@ export default function AnalyseStatementButton({ importId }: { importId: string 
       const { error: discoveryError } = await supabase.rpc("discover_statement_projects", { target_import: importId });
       if (discoveryError) throw new Error(`Project discovery failed: ${discoveryError.message}`);
 
+      setMessage("Checking for transfers already recorded in other company accounts…");
+      const { error: transferError } = await supabase.rpc("detect_statement_internal_transfers", { target_import: importId });
+      if (transferError) throw new Error(`Cross-account matching failed: ${transferError.message}`);
+
       setMessage("Project signals found. Posting unique high-confidence existing-project matches…");
       const { data: posting, error: postingError } = await supabase.rpc("auto_post_statement_matches", { target_import: importId, minimum_confidence: 94 });
       if (postingError) throw new Error(`Automatic posting failed: ${postingError.message}`);
