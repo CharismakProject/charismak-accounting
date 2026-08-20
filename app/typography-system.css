@@ -1,0 +1,562 @@
+/*
+ * Professional application typography and responsive information hierarchy.
+ * Loaded last so older compact rules cannot reduce essential text below a
+ * legible mobile size or collapse financial summaries into inline text.
+ */
+:root {
+  --font-app: "Roboto", Arial, Helvetica, sans-serif;
+  --type-caption: 12px;
+  --type-supporting: 14px;
+  --type-body: 16px;
+  --type-subtitle: 18px;
+  --type-title: 24px;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-synthesis: none;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-app) !important;
+}
+
+body {
+  font-size: var(--type-supporting);
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Keep currency and operating figures calm, aligned and easy to scan. */
+.kpi strong,
+.role-kpi strong,
+.project-list-position strong,
+.project-list-kpis b,
+.project-summary-strip b,
+.commercial-tree-card strong,
+.commercial-tree-grid b,
+.data-row strong,
+.commercial-breakdown b,
+.project-finance-strip strong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+
+/* Project portfolio: this structure previously had no layout rule. */
+.project-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.project-summary-strip > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 15px;
+  background: #fff;
+  border: 1px solid #dde6ee;
+  border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(15, 48, 72, .035);
+}
+
+.project-summary-strip small,
+.project-summary-strip b,
+.project-summary-strip span {
+  display: block;
+}
+
+.project-summary-strip small {
+  color: #607286;
+  font-size: var(--type-caption);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.project-summary-strip b {
+  color: #0c2e49;
+  font-size: 19px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.project-summary-strip span {
+  color: #77899a;
+  font-size: var(--type-caption);
+  line-height: 1.4;
+}
+
+.project-list-card {
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.project-code-pill {
+  font-size: var(--type-caption);
+  line-height: 1;
+  padding: 7px 10px;
+}
+
+.project-list-top h2 {
+  margin: 9px 0 4px;
+  color: #102e48;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.project-list-top p,
+.project-list-position small,
+.project-list-position span {
+  font-size: var(--type-supporting);
+  line-height: 1.4;
+}
+
+.project-list-position strong {
+  margin: 5px 0;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.project-list-kpis {
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.project-list-kpis > div {
+  padding: 13px;
+  border-radius: 12px;
+}
+
+.project-list-kpis small {
+  font-size: var(--type-caption);
+  line-height: 1.35;
+}
+
+.project-list-kpis b {
+  margin-top: 5px;
+  font-size: var(--type-body);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.project-list-footer {
+  gap: 10px 18px;
+  margin-top: 14px;
+  padding-top: 13px;
+  font-size: var(--type-supporting);
+  line-height: 1.45;
+}
+
+.project-list-footer-actions > div {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.project-list-footer-actions a {
+  font-size: var(--type-supporting);
+  font-weight: 800;
+  color: #064f83;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* Construction-first project overview. */
+.document-page-head {
+  margin: 0 0 16px;
+}
+
+.document-page-head > span {
+  display: inline-flex;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #e9f2ff;
+  color: #1768ac;
+  font-size: var(--type-caption);
+  font-weight: 800;
+}
+
+.document-page-head h1 {
+  margin: 8px 0 5px;
+  color: #0b2f4d;
+  font-size: clamp(27px, 4vw, 38px);
+  line-height: 1.12;
+}
+
+.document-page-head p {
+  margin: 0;
+  color: #627588;
+  font-size: var(--type-supporting);
+  line-height: 1.5;
+}
+
+.commercial-tree-card {
+  display: grid;
+  grid-template-columns: minmax(260px, .85fr) minmax(0, 1.4fr);
+  gap: 20px;
+  margin-bottom: 14px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #dce6ee;
+  border-radius: 20px;
+  box-shadow: 0 8px 28px rgba(15, 48, 72, .045);
+}
+
+.commercial-tree-card > div:first-child > small {
+  display: block;
+  color: #607488;
+  font-size: var(--type-caption);
+  font-weight: 700;
+}
+
+.commercial-tree-card > div:first-child > strong {
+  display: block;
+  margin: 7px 0 4px;
+  color: #073f65;
+  font-size: clamp(30px, 4.3vw, 42px);
+  line-height: 1.1;
+}
+
+.commercial-tree-card p {
+  margin: 0;
+  color: #718397;
+  font-size: var(--type-supporting);
+  line-height: 1.5;
+}
+
+.commercial-tree-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.commercial-tree-grid > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 16px;
+  background: #f5f8fb;
+  border-radius: 14px;
+}
+
+.commercial-tree-grid b,
+.commercial-tree-grid small {
+  display: block;
+}
+
+.commercial-tree-grid b {
+  color: #123a59;
+  font-size: var(--type-subtitle);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.commercial-tree-grid small {
+  color: #718397;
+  font-size: var(--type-caption);
+  line-height: 1.35;
+}
+
+.section-title small {
+  font-size: var(--type-caption);
+  line-height: 1.3;
+}
+
+.section-title h2 {
+  margin-top: 4px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.section-title p,
+.empty-state {
+  font-size: var(--type-supporting);
+  line-height: 1.5;
+}
+
+.data-card {
+  padding: 18px;
+  border-radius: 17px;
+}
+
+.data-row {
+  gap: 16px;
+  padding: 13px 0;
+}
+
+.data-row b,
+.data-row strong {
+  font-size: var(--type-supporting);
+  line-height: 1.35;
+}
+
+.data-row span,
+.data-row small {
+  display: block;
+  margin-top: 3px;
+  color: #77899a;
+  font-size: var(--type-caption);
+  line-height: 1.35;
+}
+
+.inline-links a,
+.simple-top a,
+.page-actions a {
+  font-size: var(--type-supporting);
+}
+
+/* Shared application hierarchy. */
+.page-eyebrow,
+.eyebrow {
+  font-size: var(--type-caption);
+}
+
+.page-heading h1,
+.page-heading.compact h1,
+.compact-header h1 {
+  font-size: clamp(28px, 4vw, 36px);
+  line-height: 1.16;
+}
+
+.page-heading > p:not(.page-eyebrow),
+.compact-header > p {
+  font-size: var(--type-body);
+  line-height: 1.55;
+}
+
+.page-toolbar a,
+.page-toolbar button,
+.md-button,
+.secondary-link,
+.back-link {
+  font-size: var(--type-supporting);
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The same legibility standard applies to each role workspace. */
+.role-header p { font-size: var(--type-caption); }
+.role-header h1 { font-size: 28px; line-height: 1.15; }
+.role-header span { font-size: var(--type-supporting); line-height: 1.45; }
+.role-kpi > span { font-size: var(--type-caption); line-height: 1.3; }
+.role-kpi strong { font-size: 21px; line-height: 1.2; }
+.role-kpi small { font-size: var(--type-caption); line-height: 1.4; }
+.role-card-head h2,
+.chart-head h3 { font-size: var(--type-subtitle); line-height: 1.25; }
+.role-card-head small,
+.chart-head small { font-size: var(--type-caption); }
+.role-data-line b,
+.role-data-line strong,
+.portfolio-row > div b,
+.performance-row b { font-size: var(--type-supporting); }
+.role-data-line small,
+.portfolio-row small,
+.performance-row small,
+.manager-project-switcher small { font-size: var(--type-caption); }
+.manager-project-switcher b { font-size: var(--type-caption); }
+.manager-project-switcher span { font-size: var(--type-supporting); }
+.manager-actions a,
+.finance-workload a { font-size: var(--type-supporting); min-height: 44px; }
+.finance-workload p { font-size: var(--type-supporting); line-height: 1.5; }
+.chart-legend,
+.chart-legend span,
+.line-chart text { font-size: 10px; }
+
+/* Navigation is an action surface, not fine print. */
+.mobile-bottom-nav b,
+.mobile-bottom-nav .mobile-add-tab b {
+  font-size: var(--type-caption);
+}
+
+.mobile-menu-head small,
+.mobile-menu-drawer > p {
+  font-size: var(--type-caption);
+}
+
+.mobile-menu-drawer nav a {
+  font-size: var(--type-supporting);
+  min-height: 44px;
+}
+
+.mobile-acting-as > small,
+.mobile-acting-as button {
+  font-size: var(--type-caption);
+}
+
+.mobile-acting-as > strong {
+  font-size: var(--type-supporting);
+}
+
+@media (max-width: 900px) {
+  body {
+    padding-bottom: calc(74px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .page-canvas,
+  .simple-shell {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .project-summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .project-summary-strip > div {
+    padding: 14px;
+  }
+
+  .project-summary-strip > div:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  .commercial-tree-card {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+
+  .project-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .project-list-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-list-top {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .project-list-position {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px 12px;
+    text-align: left;
+  }
+
+  .project-list-position small { grid-column: 1 / -1; }
+  .project-list-position strong { margin: 0; }
+  .project-list-position span { align-self: end; text-align: right; }
+
+  .role-header p { font-size: var(--type-caption) !important; }
+  .role-header h1 { font-size: 26px !important; }
+  .role-header span { font-size: var(--type-supporting) !important; }
+  .role-kpi > span { font-size: var(--type-caption) !important; }
+  .role-kpi strong { font-size: 20px !important; }
+  .role-kpi small { font-size: var(--type-caption) !important; }
+  .role-card-head h2,
+  .chart-head h3 { font-size: var(--type-subtitle) !important; }
+  .role-card-head small,
+  .chart-head small { font-size: var(--type-caption) !important; }
+  .role-data-line b,
+  .role-data-line strong,
+  .portfolio-row > div b,
+  .performance-row b { font-size: var(--type-supporting) !important; }
+  .role-data-line small,
+  .portfolio-row small,
+  .performance-row small,
+  .manager-project-switcher small { font-size: var(--type-caption) !important; }
+  .manager-project-switcher b { font-size: var(--type-caption) !important; }
+  .manager-project-switcher span { font-size: var(--type-supporting) !important; }
+  .manager-actions a,
+  .finance-workload a { font-size: var(--type-supporting) !important; }
+  .finance-workload p { font-size: var(--type-supporting) !important; }
+
+  .page-heading.compact h1,
+  .compact-header h1 { font-size: 28px !important; }
+
+  .mobile-bottom-nav {
+    height: calc(70px + env(safe-area-inset-bottom));
+    padding-top: 7px;
+  }
+
+  .mobile-bottom-nav span { font-size: 21px; }
+  .mobile-bottom-nav b,
+  .mobile-bottom-nav .mobile-add-tab b { font-size: var(--type-caption) !important; }
+
+  .mobile-menu-head small { font-size: 11px !important; }
+  .mobile-menu-head b { font-size: 18px !important; }
+  .mobile-menu-drawer nav a { font-size: var(--type-supporting) !important; }
+  .mobile-menu-drawer > p { font-size: var(--type-caption) !important; }
+  .mobile-acting-as > small,
+  .mobile-acting-as button { font-size: var(--type-caption) !important; }
+  .mobile-acting-as > strong { font-size: var(--type-supporting) !important; }
+}
+
+@media (max-width: 520px) {
+  .project-summary-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .project-summary-strip > div:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .project-list-card {
+    padding: 16px;
+  }
+
+  .commercial-tree-card {
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .commercial-tree-card > div:first-child > strong {
+    font-size: 32px;
+  }
+
+  .commercial-tree-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+  }
+
+  .commercial-tree-grid > span {
+    padding: 13px;
+  }
+
+  .commercial-tree-grid b {
+    font-size: var(--type-body);
+  }
+
+  .data-card {
+    padding: 16px;
+  }
+
+  .data-row {
+    align-items: start;
+  }
+
+  .data-row strong {
+    text-align: right;
+  }
+
+  .project-list-footer,
+  .project-list-footer-actions > div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Printed/branded reports keep their own deliberate report typography. */
+@media print {
+  .company-report,
+  .company-report * {
+    font-family: Arial, Helvetica, sans-serif !important;
+  }
+}
