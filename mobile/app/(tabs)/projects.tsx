@@ -1,0 +1,22 @@
+import { useCallback, useState } from "react";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { supabase } from "../../lib/supabase";
+import { Card, money, ProgressBar, ScreenTitle, SectionHead, baseStyles as b } from "../../components/ui";
+
+export default function Projects(){
+  const [loading,setLoading]=useState(true);const [refreshing,setRefreshing]=useState(false);const [projects,setProjects]=useState<any[]>([]);
+  const load=useCallback(async()=>{const [{data:p},{data:c}]=await Promise.all([supabase.from("projects").select("id,project_code,name,location,status,progress_percent,summary:project_financial_summaries(funding_received,confirmed_expenditure,cash_balance,outstanding_commitments,forecast_profit)").neq("status","archived").order("name"),supabase.from("project_commercial_positions").select("project_id,identified_commercial_value,base_scope,additional_scope,variations,documented_client_invoices")]);const map=new Map((c??[]).map((x:any)=>[x.project_id,x]));setProjects((p??[]).map((x:any)=>({...x,summary:Array.isArray(x.summary)?x.summary[0]:x.summary,commercial:map.get(x.id)})));setLoading(false);setRefreshing(false)},[]);
+  useFocusEffect(useCallback(()=>{load()},[load]));
+  if(loading)return <SafeAreaView style={b.screen}><View style={s.center}><ActivityIndicator size="large" color="#073f65"/></View></SafeAreaView>;
+  const total=projects.reduce((a,p)=>a+Number(p.commercial?.identified_commercial_value||0),0);const funding=projects.reduce((a,p)=>a+Number(p.summary?.funding_received||0),0);const spend=projects.reduce((a,p)=>a+Number(p.summary?.confirmed_expenditure||0),0);
+  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load()}}/>} contentContainerStyle={b.content}>
+    <ScreenTitle eyebrow="PROJECTS" title="Your project portfolio" subtitle="Open a project to see its money, scope, documents, people and decisions in one place."/>
+    <View style={s.summary}><View><Text style={s.summaryLabel}>Commercial value</Text><Text style={s.summaryValue}>{money(total)}</Text></View><View><Text style={s.summaryLabel}>Funding</Text><Text style={s.summaryValue}>{money(funding)}</Text></View><View><Text style={s.summaryLabel}>Spent</Text><Text style={s.summaryValue}>{money(spend)}</Text></View></View>
+    <SectionHead title={`${projects.length} project${projects.length===1?"":"s"}`}/>
+    {projects.map(p=>{const q=p.summary||{},commercial=Number(p.commercial?.identified_commercial_value||0);const basis=commercial||Number(q.funding_received||0);const spendPct=basis?Math.min(100,Number(q.confirmed_expenditure||0)/basis*100):0;return <Pressable key={p.id} onPress={()=>router.push({pathname:"/project/[id]",params:{id:p.id}})}><Card style={s.card}><View style={b.row}><View style={{flex:1}}><Text style={s.code}>{p.project_code}</Text><Text style={s.name}>{p.name}</Text><Text style={s.meta}>{p.location||"Location not set"} · {String(p.status).replaceAll("_"," ")}</Text></View><Text style={s.value}>{money(commercial||q.funding_received)}</Text></View><ProgressBar value={spendPct}/><View style={s.metrics}><Text>Funding {money(q.funding_received)}</Text><Text>Spent {money(q.confirmed_expenditure)}</Text><Text>Committed {money(q.outstanding_commitments)}</Text></View></Card></Pressable>})}
+    <Pressable onPress={()=>router.push("/(tabs)/add")} style={s.upload}><Text style={s.uploadText}>＋ Add documents or records</Text></Pressable>
+  </ScrollView></SafeAreaView>;
+}
+const s=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},summary:{flexDirection:"row",gap:7},summaryLabel:{fontSize:8,color:"#768897"},summaryValue:{fontSize:12,fontWeight:"900",color:"#133b57",marginTop:2},card:{gap:10},code:{fontSize:9,fontWeight:"900",color:"#1771ab"},name:{fontSize:16,fontWeight:"900",color:"#14364f",marginTop:2},meta:{fontSize:9,color:"#81909d",marginTop:3},value:{fontSize:13,fontWeight:"900",color:"#0a476c"},metrics:{flexDirection:"row",justifyContent:"space-between",gap:6},upload:{height:46,borderRadius:14,borderWidth:1,borderColor:"#cbdbe5",backgroundColor:"#fff",alignItems:"center",justifyContent:"center"},uploadText:{fontSize:12,fontWeight:"900",color:"#0a4c74"}});
