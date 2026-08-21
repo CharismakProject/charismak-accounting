@@ -66,6 +66,10 @@ export default async function Home() {
       if (rank !== 0) return rank;
       return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
     });
+  const dashboardAccounts = (accountResult.data ?? []).map((account: any) => ({
+    ...account,
+    institution_name: account.account_name || account.institution_name,
+  }));
 
   const projectIds = projects.map((p: any) => p.id);
   const visibleApprovals = projectScopedMember
@@ -93,7 +97,7 @@ export default async function Home() {
       availableRoles={availableRoles}
       managerProjectIds={assignedProjectIds}
       projects={projects}
-      accounts={accountResult.data ?? []}
+      accounts={dashboardAccounts}
       approvals={visibleApprovals}
       statements={statementResult.data ?? []}
       transactions={visibleTransactions}
