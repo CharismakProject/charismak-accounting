@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "../lib/supabase/server";
-import DashboardClient, { type RoleFamily } from "./DashboardClient";
+import ControlRoomClient from "./ControlRoomClient";
+import { type RoleFamily } from "./DashboardClient";
 
 const allFamilies: RoleFamily[] = ["md_owner", "accountant_cfo", "project_director", "project_manager"];
 
@@ -47,13 +48,14 @@ export default async function Home() {
       : projectQuery.in("id", ["00000000-0000-0000-0000-000000000000"]);
   }
 
-  const [projectResult, accountResult, approvalResult, statementResult, transactionResult, auditResult] = await Promise.all([
+  const [projectResult, accountResult, approvalResult, statementResult, transactionResult, auditResult, companyFinanceResult] = await Promise.all([
     projectQuery,
     supabase.from("financial_accounts").select("id,institution_name,account_name,account_type,current_balance,balance_as_of,last_statement_at").eq("company_id", membership.company_id).eq("is_active", true).order("institution_name"),
     supabase.from("approval_requests").select("id,project_id,request_type,description,amount,status,urgency,requested_at").eq("company_id", membership.company_id).order("requested_at", { ascending: false }).limit(100),
     supabase.from("statement_imports").select("id,detected_institution_name,detected_account_name,status,rows_total,rows_new,rows_already_known,rows_need_review,rows_auto_posted,rows_pending_review,created_at").eq("company_id", membership.company_id).order("created_at", { ascending: false }).limit(30),
     supabase.from("canonical_transactions").select("id,project_id,signed_amount,classification,status,transaction_date,narration,category_name,is_internal_transfer,is_personal_non_business").eq("company_id", membership.company_id).order("transaction_date", { ascending: false }).limit(5000),
     membership.is_owner ? supabase.from("audit_log").select("id,actor_email,acting_interface,action,entity_type,created_at").eq("company_id", membership.company_id).order("created_at", { ascending: false }).limit(12) : Promise.resolve({ data: [] } as any),
+    supabase.rpc("company_control_summary", { target_company: membership.company_id }),
   ]);
 
   const statusRank: Record<string, number> = { active: 0, on_hold: 1, draft: 2, completed: 3 };
@@ -81,7 +83,7 @@ export default async function Home() {
     : [{ data: [] as any[] }, { data: [] as any[] }];
 
   return (
-    <DashboardClient
+    <ControlRoomClient
       companyId={membership.company_id}
       companyName={company?.name ?? "Company"}
       userEmail={user.email ?? ""}
@@ -98,6 +100,7 @@ export default async function Home() {
       auditRows={auditResult.data ?? []}
       imprests={imprests ?? []}
       costCategories={costCategories ?? []}
+      companyFinance={companyFinanceResult.data ?? null}
     />
   );
 }
