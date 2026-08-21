@@ -3,6 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
+import { parseRequiredMoney, validateApprovalDecision } from "../../lib/accounting/guards";
+
+const REQUEST_TYPES = new Set([
+  "purchase","labour","subcontract","imprest","material_advance","hire","reimbursement","salary",
+  "project_funding","supplier","variation","company_expense",
+]);
+const URGENCIES = new Set(["normal","urgent","emergency"]);
 
 async function context() {
   const supabase = await createClient();
@@ -19,10 +26,18 @@ export async function createApprovalRequest(formData: FormData) {
   const { supabase, user, membership } = await context();
   const description = String(formData.get("description") || "").trim();
   const requestType = String(formData.get("request_type") || "purchase").trim();
-  const amount = Number(formData.get("amount") || 0);
+  const amount = parseRequiredMoney(formData.get("amount"), "Request amount", { allowZero: false });
   const projectId = String(formData.get("project_id") || "").trim() || null;
   const urgency = String(formData.get("urgency") || "normal");
-  if (!description || !Number.isFinite(amount) || amount < 0) throw new Error("Description and a valid amount are required.");
+  if (!description) throw new Error("Describe what this request is for.");
+  if (description.length > 1000) throw new Error("Request description is too long.");
+  if (!REQUEST_TYPES.has(requestType)) throw new Error("Choose a valid request type.");
+  if (!URGENCIES.has(urgency)) throw new Error("Choose a valid urgency.");
+
+  if (projectId) {
+    const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).eq("company_id", membership.company_id).maybeSingle();
+    if (!project) throw new Error("Selected project is not accessible in your company workspace.");
+  }
 
   const { error } = await supabase.from("approval_requests").insert({
     company_id: membership.company_id,
@@ -42,7 +57,7 @@ export async function createApprovalRequest(formData: FormData) {
 }
 
 async function decide(formData: FormData, action: "approve" | "partial_approve" | "reject" | "return") {
-  const { supabase, user, activeInterface } = await context();
+  const { supabase } = await context();
   const requestId = String(formData.get("request_id") || "");
   if (!requestId) throw new Error("Request ID is required.");
   const comments = String(formData.get("comments") || "").trim() || null;
@@ -51,25 +66,17 @@ async function decide(formData: FormData, action: "approve" | "partial_approve" 
   const { data: request, error: requestError } = await supabase.from("approval_requests").select("id, amount, status").eq("id", requestId).single();
   if (requestError || !request) throw new Error("Request not found or not accessible.");
 
-  const approvedAmount = action === "approve" ? Number(request.amount) : action === "partial_approve" ? Number(amountRaw || 0) : 0;
-  const status = action === "approve" ? "approved" : action === "partial_approve" ? "partially_approved" : action === "reject" ? "rejected" : "returned";
-  const { error } = await supabase.from("approval_requests").update({
-    status,
-    approved_amount: approvedAmount,
-    decided_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("id", requestId);
+  // Fail early with a clear message; the database RPC repeats these checks and performs
+  // the request update + audit action in one transaction.
+  const validated = validateApprovalDecision(action, request.amount, amountRaw);
+  const { error } = await supabase.rpc("decide_approval_request_atomic", {
+    target_request: requestId,
+    target_action: action,
+    target_approved_amount: action === "partial_approve" ? validated.approvedAmount : null,
+    target_comments: comments,
+  });
   if (error) throw new Error(error.message);
 
-  const { error: actionError } = await supabase.from("approval_actions").insert({
-    request_id: requestId,
-    actor_user_id: user.id,
-    action,
-    amount: approvedAmount || null,
-    comments,
-    acting_interface: activeInterface,
-  });
-  if (actionError) throw new Error(actionError.message);
   revalidatePath("/approvals");
   revalidatePath("/");
 }
