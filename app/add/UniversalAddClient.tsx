@@ -3,9 +3,20 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "../../lib/supabase/client";
+import { validateUploadBatch } from "../../lib/accounting/guards";
 
 type ProjectOption = { id: string; project_code: string; name: string };
 type Result = { name: string; state: "queued"|"processing"|"done"|"review"|"failed"|"duplicate"; type?: string; project?: string; message: string; href?: string };
+
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const allowedMimeByExt: Record<string, string[]> = {
+  pdf: ["application/pdf"],
+  csv: ["text/csv", "application/csv", "text/plain", "application/vnd.ms-excel"],
+  xlsx: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/octet-stream"],
+  xls: ["application/vnd.ms-excel", "application/octet-stream"],
+  docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/octet-stream"],
+  jpg: ["image/jpeg"], jpeg: ["image/jpeg"], png: ["image/png"], webp: ["image/webp"],
+};
 
 async function sha256(file: File) {
   const bytes = await file.arrayBuffer();
@@ -13,18 +24,26 @@ async function sha256(file: File) {
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function mimeCompatible(file: File, ext: string) {
+  if (!file.type) return true;
+  const allowed = allowedMimeByExt[ext];
+  return Boolean(allowed?.includes(file.type));
+}
+
 async function functionErrorMessage(error: unknown) {
   const fallback = error instanceof Error ? error.message : "The document analysis service could not complete this file.";
   try {
     const context = (error as { context?: Response } | null)?.context;
     if (context && typeof context.clone === "function") {
+      if (context.status === 401) return "Your secure session needs to be refreshed. Sign in again, then retry this file.";
+      if (context.status === 404) return "The document analysis service is not available on this deployment yet.";
+      if (context.status >= 500) return context.status === 546
+        ? "This file exceeded the analyser's compute limit. The upload is safe and was not counted twice. Retry the same file after the low-memory analyser is available."
+        : "Charismak could not finish analysing this file. The upload is safe; retry the same file after the service recovers.";
       const response = context.clone();
       const payload = await response.json().catch(() => null) as { error?: string; message?: string } | null;
       if (payload?.error) return payload.error;
       if (payload?.message) return payload.message;
-      if (context.status === 401) return "Your secure session needs to be refreshed. Sign in again, then retry this file.";
-      if (context.status === 404) return "The document analysis service is not available on this deployment yet.";
-      if (context.status >= 500) return "Charismak could not finish analysing this file. The upload is safe; retry the same file after the service recovers.";
     }
   } catch {}
   return fallback === "Edge Function returned a non-2xx status code"
@@ -48,6 +67,13 @@ export default function UniversalAddClient({ companyId, projects, defaultProject
 
   async function processFiles() {
     if (!files.length || busy) return;
+    try {
+      validateUploadBatch(files.length, files.reduce((sum, file) => sum + file.size, 0));
+    } catch (error) {
+      setSummary(error instanceof Error ? error.message : "The selected upload batch is not valid.");
+      return;
+    }
+
     setBusy(true);
     setSummary("");
     setResults(files.map((f) => ({ name: f.name, state: "queued", message: "Waiting…" })));
@@ -97,9 +123,10 @@ export default function UniversalAddClient({ companyId, projects, defaultProject
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         update(i, { state: "processing", message: "Reading file…" });
-        if (file.size > 20 * 1024 * 1024) { failed++; update(i, { state: "failed", message: "File is over the 20 MB limit." }); continue; }
+        if (file.size > MAX_FILE_BYTES) { failed++; update(i, { state: "failed", message: "File is over the 20 MB limit." }); continue; }
         const ext = (file.name.split(".").pop() || "").toLowerCase();
         if (!["pdf","csv","xlsx","xls","docx","jpg","jpeg","png","webp"].includes(ext)) { failed++; update(i, { state: "failed", message: "Unsupported file type." }); continue; }
+        if (!mimeCompatible(file, ext)) { failed++; update(i, { state: "failed", message: "The file contents/type do not match the selected file extension." }); continue; }
         const hash = await sha256(file);
         const { data: duplicate } = await supabase.from("source_documents").select("id,project_id,document_type,file_name").eq("company_id", companyId).eq("file_hash", hash).limit(1).maybeSingle();
         if (duplicate) {
@@ -123,7 +150,13 @@ export default function UniversalAddClient({ companyId, projects, defaultProject
         const { data: doc, error: docError } = await supabase.from("source_documents").insert({ company_id: companyId, project_id: projectHint || null, document_type: "other", file_name: file.name, storage_path: path, file_hash: hash, metadata: { bucket: "universal-intake", extension: ext, mime_type: file.type || null, original_size: file.size, intake_project_hint: projectHint || null }, uploaded_by: auth.user.id }).select("id").single();
         if (docError || !doc) { await supabase.storage.from("universal-intake").remove([path]); failed++; update(i, { state: "failed", message: docError?.message || "Could not register file." }); continue; }
         const { data: item, error: itemError } = await supabase.from("intake_items").insert({ batch_id: batch.id, company_id: companyId, document_id: doc.id, detected_project_id: projectHint || null }).select("id").single();
-        if (itemError || !item) { failed++; update(i, { state: "failed", message: itemError?.message || "Could not create intake item." }); continue; }
+        if (itemError || !item) {
+          await supabase.from("source_documents").delete().eq("id", doc.id);
+          await supabase.storage.from("universal-intake").remove([path]);
+          failed++;
+          update(i, { state: "failed", message: itemError?.message || "Could not create intake item." });
+          continue;
+        }
 
         update(i, { message: "Understanding the document…" });
         const { data: analysed, error: analyseError } = await supabase.functions.invoke("analyse-intake-document-v3", { body: { documentId: doc.id, batchId: batch.id } });
@@ -157,7 +190,7 @@ export default function UniversalAddClient({ companyId, projects, defaultProject
       <label className="add-drop">
         <input type="file" multiple accept=".pdf,.csv,.xlsx,.xls,.docx,.jpg,.jpeg,.png,.webp" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
         <strong>{files.length ? `${files.length} file${files.length === 1 ? "" : "s"} selected` : "Choose files"}</strong>
-        <span>Mix different document types in the same upload · up to 20 MB each</span>
+        <span>Up to 20 files · 20 MB each · 100 MB combined</span>
       </label>
       <div className="add-hint-row">
         <label><span>Already know the project? <small>Optional</small></span><select value={projectHint} onChange={(e) => setProjectHint(e.target.value)}><option value="">Let Charismak detect it</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label>

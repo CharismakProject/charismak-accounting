@@ -11,6 +11,7 @@ const allRoles:RoleFamily[]=["md_owner","accountant_cfo","project_director","pro
 const moreItems = [
   ["Needs your decision", "/review"],
   ["Money & Treasury", "/treasury"],
+  ["Accounting Control", "/accounting"],
   ["Money Activity", "/statements"],
   ["Notifications", "/notifications"],
   ["Reports", "/reports"],

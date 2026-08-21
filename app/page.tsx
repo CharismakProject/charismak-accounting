@@ -18,7 +18,7 @@ export default async function Home() {
     .eq("status", "active")
     .limit(1)
     .maybeSingle();
-  if (!membership) redirect("/login?message=Please+sign+in+with+your+company+account");
+  if (!membership) redirect("/onboarding/company");
 
   const [{ data: company }, { data: positionRows }, { data: preference }, { data: assignments }] = await Promise.all([
     supabase.from("companies").select("name").eq("id", membership.company_id).maybeSingle(),

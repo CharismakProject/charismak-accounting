@@ -16,6 +16,7 @@ import "./project-nav.css";
 import "./product-simplification.css";
 import "./branding.css";
 import "./reports.css";
+import "./accounting.css";
 import "./typography-system.css";
 import "./web-mobile-final.css";
 import PwaRegister from "./PwaRegister";
