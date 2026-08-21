@@ -17,5 +17,5 @@ export async function createCompanyWorkspace(formData: FormData) {
     desired_slug: null,
   });
   if (error) throw new Error(error.message);
-  redirect("/setup");
+  redirect("/onboarding/start");
 }
