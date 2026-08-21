@@ -1,5 +1,6 @@
 "use client";
 
+// Android-safe file access used by universal document intake.
 export function readWithFileReader(blob: Blob): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
