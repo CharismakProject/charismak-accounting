@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
-import UniversalIntakeV3 from "./UniversalIntakeV3";
+import UniversalIntakeV4 from "./UniversalIntakeV4";
 import RetryStoredUpload from "./RetryStoredUpload";
 
 export default async function AddPage({searchParams}:{searchParams:Promise<{projectId?:string;onboarding?:string}>}){
@@ -18,6 +18,6 @@ export default async function AddPage({searchParams}:{searchParams:Promise<{proj
   ]);
   const allowed=new Set((projects??[]).map((p:any)=>p.id));
   const defaultProjectId=query.projectId&&allowed.has(query.projectId)?query.projectId:"";
-  const retry=(pendingItems??[]).map((row:any)=>({...row,document:Array.isArray(row.document)?row.document[0]:row.document})).find((row:any)=>row.document?.id&&row.document?.document_type==="other");
-  return <main className="simple-shell"><div className="simple-wrap"><div className="simple-top"><Link href={onboarding?"/onboarding/start":"/"}>← {onboarding?"Start choices":"Home"}</Link><span style={{display:"flex",gap:12}}><Link href="/documents">Documents</Link><Link href="/review">Needs decision</Link><Link href="/projects">Projects</Link></span></div>{retry&&!onboarding&&<RetryStoredUpload documentId={retry.document.id} batchId={retry.batch_id} fileName={retry.document.file_name} message={retry.message}/>}<UniversalIntakeV3 companyId={membership.company_id} projects={projects??[]} defaultProjectId={defaultProjectId} onboarding={onboarding}/></div></main>;
+  const retry=(pendingItems??[]).map((row:any)=>({...row,document:Array.isArray(row.document)?row.document[0]:row.document})).find((row:any)=>row.document?.id&&row.document?.document_type==="other"&&row.status==="failed");
+  return <main className="simple-shell"><div className="simple-wrap"><div className="simple-top"><Link href={onboarding?"/onboarding/start":"/"}>← {onboarding?"Start choices":"Home"}</Link><span style={{display:"flex",gap:12}}><Link href="/documents">Documents</Link><Link href="/review">Needs decision</Link><Link href="/projects">Projects</Link></span></div>{retry&&!onboarding&&<RetryStoredUpload documentId={retry.document.id} batchId={retry.batch_id} fileName={retry.document.file_name} message={retry.message}/>}<UniversalIntakeV4 companyId={membership.company_id} projects={projects??[]} defaultProjectId={defaultProjectId} onboarding={onboarding}/></div></main>;
 }
