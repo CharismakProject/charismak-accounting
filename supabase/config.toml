@@ -1,0 +1,4 @@
+project_id = "charismak-accounting-qa-local"
+
+[db]
+major_version = 17
