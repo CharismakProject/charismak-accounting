@@ -10,6 +10,7 @@ const roleLabel:Record<RoleFamily,string>={md_owner:"MD / Owner",accountant_cfo:
 const allRoles:RoleFamily[]=["md_owner","accountant_cfo","project_director","project_manager"];
 const moreItems = [
   ["Needs your decision", "/review"],
+  ["Documents", "/documents"],
   ["Money & Treasury", "/treasury"],
   ["Accounting Control", "/accounting"],
   ["Money Activity", "/statements"],
@@ -78,7 +79,7 @@ export default function MobileMenu() {
     <aside className={`mobile-menu-drawer compact-drawer ${open ? "open" : ""}`} aria-hidden={!open}>
       <div className="mobile-menu-head"><div><small>CHARISMAK</small><b>More</b></div><button type="button" aria-label="Close menu" onClick={() => setOpen(false)}>×</button></div>
       {roles.length>1&&<section className="mobile-acting-as"><small>ACTING AS</small><strong>{roleLabel[activeRole]}</strong><div>{roles.map(role=><button key={role} type="button" disabled={roleBusy} className={activeRole===role?"active":""} onClick={()=>changeRole(role)}>{roleLabel[role]}</button>)}</div></section>}
-      <nav>{secondary.map(([label,href]) => <Link key={href} href={href} className={active(href) ? "active" : ""}>{label}<span>›</span></Link>)}</nav>
+      <nav>{secondary.map(([text,href]) => <Link key={href} href={href} className={active(href) ? "active" : ""}>{text}<span>›</span></Link>)}</nav>
       <p>Advanced tools stay here so everyday project finance stays simple.</p>
     </aside>
   </>;
