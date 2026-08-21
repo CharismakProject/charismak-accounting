@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "../lib/supabase/server";
 import ControlRoomClient from "./ControlRoomClient";
@@ -70,6 +71,8 @@ export default async function Home() {
     ...account,
     institution_name: account.account_name || account.institution_name,
   }));
+  const statementRows:any[] = statementResult.data ?? [];
+  const projectStatement = statementRows.find((row:any)=>!/saving|owealth/i.test(String(row.detected_account_name||"")));
 
   const projectIds = projects.map((p: any) => p.id);
   const visibleApprovals = projectScopedMember
@@ -86,7 +89,11 @@ export default async function Home() {
       ])
     : [{ data: [] as any[] }, { data: [] as any[] }];
 
-  return (
+  return <>
+    {projects.length===0&&<section style={{margin:"12px auto 0",width:"min(1180px,calc(100% - 24px))",border:"1px solid #cfe0e8",borderRadius:16,background:"linear-gradient(135deg,#f8fcff,#eef8f5)",padding:"16px 17px",display:"grid",gap:10}}>
+      <div><small style={{fontSize:9,fontWeight:900,letterSpacing:".13em",color:"#16745e"}}>START WITH WHAT YOU ALREADY HAVE</small><h2 style={{margin:"5px 0 4px",fontSize:20,color:"#14354d"}}>{projectStatement?"Your records are in. Turn the signals into your first projects.":"Do not rebuild your accounting from scratch."}</h2><p style={{margin:0,maxWidth:760,fontSize:12,lineHeight:1.55,color:"#63788a"}}>{projectStatement?"Charismak has a non-savings statement ready for project intelligence. Review the names and site tags it found, or search the statement with your own keywords, then create or link the real projects.":"Upload the bank statements, BOQs, quotations, invoices and receipts you already use. Tell Charismak what the file is and what you want done; it will organise the records and ask only for decisions that matter."}</p></div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{projectStatement&&<Link href={`/statements/${projectStatement.id}/projects`} className="primary-link-button">Review statement project signals</Link>}<Link href="/add" className={projectStatement?"secondary-button":"primary-link-button"}>{projectStatement?"Add another record":"Upload existing records"}</Link><Link href="/projects/new" className="secondary-button">Create a project manually</Link></div>
+    </section>}
     <ControlRoomClient
       companyId={membership.company_id}
       companyName={company?.name ?? "Company"}
@@ -99,12 +106,12 @@ export default async function Home() {
       projects={projects}
       accounts={dashboardAccounts}
       approvals={visibleApprovals}
-      statements={statementResult.data ?? []}
+      statements={statementRows}
       transactions={visibleTransactions}
       auditRows={auditResult.data ?? []}
       imprests={imprests ?? []}
       costCategories={costCategories ?? []}
       companyFinance={companyFinanceResult.data ?? null}
     />
-  );
+  </>;
 }
