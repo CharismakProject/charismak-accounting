@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
+import { FINANCIAL_ACCOUNT_TYPES, boundedText, optionalIsoDate, requireAllowed, requiredPositiveMoney } from "../../lib/validation/finance";
 
 async function context() {
   const supabase = await createClient();
@@ -16,22 +17,34 @@ async function context() {
 
 export async function createFinancialAccount(formData: FormData) {
   const { supabase, user, membership } = await context();
-  const institution = String(formData.get("institution_name") || "").trim();
-  const accountName = String(formData.get("account_name") || "").trim();
-  const accountType = String(formData.get("account_type") || "bank");
-  const accountNumber = String(formData.get("account_number") || "").trim() || null;
-  const opening = String(formData.get("opening_balance") || "").trim();
-  if (!institution || !accountName) throw new Error("Institution and account label are required.");
+  const institution = boundedText(formData.get("institution_name"), "Institution", 120, true);
+  const accountName = boundedText(formData.get("account_name"), "Account label", 160, true);
+  const accountType = requireAllowed(String(formData.get("account_type") || "bank"), FINANCIAL_ACCOUNT_TYPES, "Account type");
+  const accountNumber = boundedText(formData.get("account_number"), "Account number", 32, false) || null;
+  const openingRaw = String(formData.get("opening_balance") || "").trim();
+  const opening = openingRaw ? Number(openingRaw) : 0;
+  if (!Number.isFinite(opening)) throw new Error("Opening balance must be a valid number.");
+  if (accountNumber && !/^[0-9*Xx\-\s]{4,32}$/.test(accountNumber)) throw new Error("Account number contains unsupported characters.");
+
+  const institutionKey = institution.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const { data: duplicate } = await supabase.from("financial_accounts")
+    .select("id")
+    .eq("company_id", membership.company_id)
+    .eq("account_name", accountName)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+  if (duplicate) throw new Error("An active financial account with this label already exists.");
 
   const { error } = await supabase.from("financial_accounts").insert({
     company_id: membership.company_id,
     account_type: accountType,
     institution_name: institution,
-    institution_key: institution.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+    institution_key: institutionKey || "account",
     account_name: accountName,
     account_number_masked: accountNumber,
-    current_balance: opening ? Number(opening) : 0,
-    balance_as_of: opening ? new Date().toISOString().slice(0,10) : null,
+    current_balance: opening,
+    balance_as_of: openingRaw ? new Date().toISOString().slice(0,10) : null,
     account_scope: "company",
     created_by: user.id,
   });
@@ -43,15 +56,28 @@ export async function createFinancialAccount(formData: FormData) {
 
 export async function recordInternalTransfer(formData: FormData) {
   const { supabase, user, membership } = await context();
-  const amount = Number(formData.get("amount") || 0);
-  const date = String(formData.get("transfer_date") || "") || new Date().toISOString().slice(0,10);
+  const amount = requiredPositiveMoney(formData.get("amount"), "Transfer amount");
+  const date = optionalIsoDate(formData.get("transfer_date"), "Transfer date") || new Date().toISOString().slice(0,10);
   const fromAccount = String(formData.get("from_account_id") || "") || null;
   const toAccount = String(formData.get("to_account_id") || "") || null;
   const fromProject = String(formData.get("from_project_id") || "") || null;
   const toProject = String(formData.get("to_project_id") || "") || null;
-  const description = String(formData.get("description") || "").trim() || "Internal transfer";
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Transfer amount must be greater than zero.");
-  if (!fromAccount && !toAccount) throw new Error("Select at least one financial account.");
+  const description = boundedText(formData.get("description"), "Description", 500, false) || "Internal transfer";
+  if (!fromAccount && !fromProject) throw new Error("Select a source account or source project.");
+  if (!toAccount && !toProject) throw new Error("Select a destination account or destination project.");
+  if (fromAccount && toAccount && fromAccount === toAccount && (!fromProject || !toProject || fromProject === toProject)) throw new Error("Source and destination cannot be the same.");
+  if (fromProject && toProject && fromProject === toProject && (!fromAccount || !toAccount || fromAccount === toAccount)) throw new Error("Source and destination cannot be the same.");
+
+  const accountIds = Array.from(new Set([fromAccount, toAccount].filter(Boolean))) as string[];
+  if (accountIds.length) {
+    const { data: validAccounts, error: accountError } = await supabase.from("financial_accounts").select("id").eq("company_id", membership.company_id).in("id", accountIds);
+    if (accountError || (validAccounts ?? []).length !== accountIds.length) throw new Error("One or more selected financial accounts do not belong to this company.");
+  }
+  const projectIds = Array.from(new Set([fromProject, toProject].filter(Boolean))) as string[];
+  if (projectIds.length) {
+    const { data: validProjects, error: projectError } = await supabase.from("projects").select("id").eq("company_id", membership.company_id).in("id", projectIds);
+    if (projectError || (validProjects ?? []).length !== projectIds.length) throw new Error("One or more selected projects do not belong to this company.");
+  }
 
   const createsDue = Boolean(fromProject && toProject && fromProject !== toProject);
   const { data: transfer, error } = await supabase.from("transfer_pairs").insert({
@@ -79,7 +105,10 @@ export async function recordInternalTransfer(formData: FormData) {
       description,
       status: "open",
     });
-    if (obligationError) throw new Error(obligationError.message);
+    if (obligationError) {
+      await supabase.from("transfer_pairs").delete().eq("id", transfer.id).eq("company_id", membership.company_id);
+      throw new Error(obligationError.message);
+    }
   }
 
   revalidatePath("/treasury");

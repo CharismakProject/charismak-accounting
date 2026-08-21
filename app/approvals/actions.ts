@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
+import { APPROVAL_REQUEST_TYPES, APPROVAL_URGENCIES, boundedText, requireAllowed, requiredPositiveMoney } from "../../lib/validation/finance";
 
 async function context() {
   const supabase = await createClient();
@@ -17,12 +18,16 @@ async function context() {
 
 export async function createApprovalRequest(formData: FormData) {
   const { supabase, user, membership } = await context();
-  const description = String(formData.get("description") || "").trim();
-  const requestType = String(formData.get("request_type") || "purchase").trim();
-  const amount = Number(formData.get("amount") || 0);
+  const description = boundedText(formData.get("description"), "Description", 1000, true);
+  const requestType = requireAllowed(String(formData.get("request_type") || "purchase").trim(), APPROVAL_REQUEST_TYPES, "Request type");
+  const amount = requiredPositiveMoney(formData.get("amount"), "Request amount");
   const projectId = String(formData.get("project_id") || "").trim() || null;
-  const urgency = String(formData.get("urgency") || "normal");
-  if (!description || !Number.isFinite(amount) || amount < 0) throw new Error("Description and a valid amount are required.");
+  const urgency = requireAllowed(String(formData.get("urgency") || "normal"), APPROVAL_URGENCIES, "Urgency");
+
+  if (projectId) {
+    const { data: project, error: projectError } = await supabase.from("projects").select("id").eq("id", projectId).eq("company_id", membership.company_id).maybeSingle();
+    if (projectError || !project) throw new Error("Selected project is not accessible in this company workspace.");
+  }
 
   const { error } = await supabase.from("approval_requests").insert({
     company_id: membership.company_id,
@@ -42,23 +47,34 @@ export async function createApprovalRequest(formData: FormData) {
 }
 
 async function decide(formData: FormData, action: "approve" | "partial_approve" | "reject" | "return") {
-  const { supabase, user, activeInterface } = await context();
+  const { supabase, user, membership, activeInterface } = await context();
   const requestId = String(formData.get("request_id") || "");
   if (!requestId) throw new Error("Request ID is required.");
-  const comments = String(formData.get("comments") || "").trim() || null;
+  const comments = boundedText(formData.get("comments"), "Comments", 2000, false) || null;
   const amountRaw = String(formData.get("approved_amount") || "").trim();
 
-  const { data: request, error: requestError } = await supabase.from("approval_requests").select("id, amount, status").eq("id", requestId).single();
-  if (requestError || !request) throw new Error("Request not found or not accessible.");
+  const { data: request, error: requestError } = await supabase.from("approval_requests").select("id, company_id, project_id, requested_by, amount, approved_amount, status, decided_at").eq("id", requestId).single();
+  if (requestError || !request || request.company_id !== membership.company_id) throw new Error("Request not found or not accessible.");
+  if (!["pending", "emergency_retrospective"].includes(String(request.status))) throw new Error("Only pending or emergency-retrospective requests can be decided.");
+  if (!membership.is_owner && request.requested_by === user.id && ["approve", "partial_approve"].includes(action)) throw new Error("A non-owner cannot approve their own request.");
 
-  const approvedAmount = action === "approve" ? Number(request.amount) : action === "partial_approve" ? Number(amountRaw || 0) : 0;
+  const requestedAmount = Number(request.amount);
+  if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) throw new Error("The request has an invalid amount and cannot be approved.");
+  let approvedAmount = 0;
+  if (action === "approve") approvedAmount = requestedAmount;
+  if (action === "partial_approve") {
+    approvedAmount = Number(amountRaw);
+    if (!Number.isFinite(approvedAmount) || approvedAmount <= 0 || approvedAmount >= requestedAmount) throw new Error("Partial approval must be greater than zero and less than the requested amount.");
+  }
+
   const status = action === "approve" ? "approved" : action === "partial_approve" ? "partially_approved" : action === "reject" ? "rejected" : "returned";
+  const now = new Date().toISOString();
   const { error } = await supabase.from("approval_requests").update({
     status,
     approved_amount: approvedAmount,
-    decided_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq("id", requestId);
+    decided_at: now,
+    updated_at: now,
+  }).eq("id", requestId).eq("company_id", membership.company_id).in("status", ["pending", "emergency_retrospective"]);
   if (error) throw new Error(error.message);
 
   const { error: actionError } = await supabase.from("approval_actions").insert({
@@ -69,7 +85,10 @@ async function decide(formData: FormData, action: "approve" | "partial_approve" 
     comments,
     acting_interface: activeInterface,
   });
-  if (actionError) throw new Error(actionError.message);
+  if (actionError) {
+    await supabase.from("approval_requests").update({status: request.status, approved_amount: request.approved_amount, decided_at: request.decided_at, updated_at: new Date().toISOString()}).eq("id", requestId).eq("company_id", membership.company_id);
+    throw new Error(actionError.message);
+  }
   revalidatePath("/approvals");
   revalidatePath("/");
 }
