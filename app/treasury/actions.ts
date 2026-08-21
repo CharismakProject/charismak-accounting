@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
+import { validateInternalTransfer } from "../../lib/accounting/guards";
+
+const ACCOUNT_TYPES = new Set(["bank","fintech_wallet","cash","petty_cash","site_imprest","loan_credit","other"]);
 
 async function context() {
   const supabase = await createClient();
@@ -20,8 +23,12 @@ export async function createFinancialAccount(formData: FormData) {
   const accountName = String(formData.get("account_name") || "").trim();
   const accountType = String(formData.get("account_type") || "bank");
   const accountNumber = String(formData.get("account_number") || "").trim() || null;
-  const opening = String(formData.get("opening_balance") || "").trim();
+  const openingRaw = String(formData.get("opening_balance") || "").trim();
   if (!institution || !accountName) throw new Error("Institution and account label are required.");
+  if (institution.length > 160 || accountName.length > 160) throw new Error("Institution or account label is too long.");
+  if (!ACCOUNT_TYPES.has(accountType)) throw new Error("Choose a valid financial account type.");
+  const opening = openingRaw === "" ? 0 : Number(openingRaw);
+  if (!Number.isFinite(opening)) throw new Error("Opening balance must be a valid number.");
 
   const { error } = await supabase.from("financial_accounts").insert({
     company_id: membership.company_id,
@@ -30,8 +37,8 @@ export async function createFinancialAccount(formData: FormData) {
     institution_key: institution.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
     account_name: accountName,
     account_number_masked: accountNumber,
-    current_balance: opening ? Number(opening) : 0,
-    balance_as_of: opening ? new Date().toISOString().slice(0,10) : null,
+    current_balance: opening,
+    balance_as_of: openingRaw ? new Date().toISOString().slice(0,10) : null,
     account_scope: "company",
     created_by: user.id,
   });
@@ -42,47 +49,32 @@ export async function createFinancialAccount(formData: FormData) {
 }
 
 export async function recordInternalTransfer(formData: FormData) {
-  const { supabase, user, membership } = await context();
-  const amount = Number(formData.get("amount") || 0);
+  const { supabase, membership } = await context();
   const date = String(formData.get("transfer_date") || "") || new Date().toISOString().slice(0,10);
-  const fromAccount = String(formData.get("from_account_id") || "") || null;
-  const toAccount = String(formData.get("to_account_id") || "") || null;
   const fromProject = String(formData.get("from_project_id") || "") || null;
   const toProject = String(formData.get("to_project_id") || "") || null;
   const description = String(formData.get("description") || "").trim() || "Internal transfer";
-  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Transfer amount must be greater than zero.");
-  if (!fromAccount && !toAccount) throw new Error("Select at least one financial account.");
+  const validated = validateInternalTransfer({
+    amount: formData.get("amount"),
+    fromAccountId: String(formData.get("from_account_id") || ""),
+    toAccountId: String(formData.get("to_account_id") || ""),
+  });
 
-  const createsDue = Boolean(fromProject && toProject && fromProject !== toProject);
-  const { data: transfer, error } = await supabase.from("transfer_pairs").insert({
-    company_id: membership.company_id,
-    transfer_date: date,
-    amount,
-    from_account_id: fromAccount,
-    to_account_id: toAccount,
-    from_project_id: fromProject,
-    to_project_id: toProject,
-    status: "confirmed",
-    creates_due_to_from: createsDue,
-    confirmed_by: user.id,
-    confirmed_at: new Date().toISOString(),
-  }).select("id").single();
+  const { error } = await supabase.rpc("record_internal_transfer_atomic", {
+    target_company: membership.company_id,
+    target_transfer_date: date,
+    target_amount: validated.amount,
+    target_from_account: validated.fromAccountId,
+    target_to_account: validated.toAccountId,
+    target_from_project: fromProject,
+    target_to_project: toProject,
+    target_description: description,
+  });
   if (error) throw new Error(error.message);
-
-  if (createsDue && transfer) {
-    const { error: obligationError } = await supabase.from("inter_project_obligations").insert({
-      company_id: membership.company_id,
-      creditor_project_id: fromProject,
-      debtor_project_id: toProject,
-      amount,
-      source_transfer_id: transfer.id,
-      description,
-      status: "open",
-    });
-    if (obligationError) throw new Error(obligationError.message);
-  }
 
   revalidatePath("/treasury");
   revalidatePath("/");
+  if (fromProject) revalidatePath(`/projects/${fromProject}`);
+  if (toProject) revalidatePath(`/projects/${toProject}`);
   redirect("/treasury?saved=transfer");
 }
