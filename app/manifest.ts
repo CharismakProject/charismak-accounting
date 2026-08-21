@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Charismak Accounting",
-    short_name: "Accounting",
-    description: "Construction accounting, project cost control, treasury and approvals.",
+    name: "Charismak Construction Accounting",
+    short_name: "Charismak CA",
+    description: "Construction accounting, project cost control, treasury, approvals and document intelligence.",
     start_url: "/",
     scope: "/",
     display: "standalone",
