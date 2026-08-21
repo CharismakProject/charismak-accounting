@@ -1,15 +1,18 @@
 /* Final web-mobile overrides. Loaded after typography-system.css. */
-@media (max-width: 900px) {
+@media (max-width: 900px), (hover: none) and (pointer: coarse) {
   .mobile-menu-drawer {
     width: min(84vw, 320px) !important;
     max-width: 320px !important;
     height: 100dvh !important;
     max-height: none !important;
     top: 0 !important;
+    right: auto !important;
     bottom: 0 !important;
     border-radius: 0 18px 18px 0 !important;
     padding: calc(14px + env(safe-area-inset-top)) 14px calc(86px + env(safe-area-inset-bottom)) !important;
+    transform: translateX(-105%) !important;
   }
+  .mobile-menu-drawer.open { transform: translateX(0) !important; }
   .mobile-menu-head small { font-size: 10px !important; }
   .mobile-menu-head b { font-size: 20px !important; }
   .mobile-menu-drawer nav {
@@ -43,6 +46,28 @@
     line-height: 1.25 !important;
     white-space: normal !important;
   }
+
+  /* Android browsers can request a desktop-width viewport. Touch capability is a better
+     signal for the phone experience than CSS width alone, so collapse the desktop role shell. */
+  .role-shell { display: block !important; min-height: 100dvh !important; }
+  .role-sidebar { display: none !important; }
+  .role-main { width: 100% !important; min-width: 0 !important; }
+  .role-mobile-top { display: none !important; }
+  .role-header { padding: 16px 16px 12px !important; }
+  .role-header h1 { font-size: 25px !important; line-height: 1.08 !important; }
+  .role-header span { font-size: 12px !important; line-height: 1.45 !important; }
+  .role-content { padding: 10px 10px 92px !important; gap: 10px !important; }
+  .role-kpis, .role-kpis-5 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .role-grid, .role-grid-wide, .chart-grid { grid-template-columns: 1fr !important; }
+  .role-kpi { padding: 12px !important; }
+  .role-kpi > span { font-size: 10px !important; }
+  .role-kpi strong { font-size: 18px !important; }
+  .role-kpi small { font-size: 10px !important; }
+  .role-card { padding: 12px !important; }
+  .role-card-head small { font-size: 9px !important; }
+  .role-card-head h2 { font-size: 16px !important; }
+  .role-card-head a { font-size: 10px !important; }
+  .role-empty, .role-muted { font-size: 11px !important; }
   .page-heading.compact h1,
   .compact-header h1 { font-size: 26px !important; line-height: 1.13 !important; }
 }
@@ -52,4 +77,5 @@
   .page-heading.compact h1,
   .compact-header h1 { font-size: 24px !important; }
   .mobile-acting-as button { font-size: 11px !important; }
+  .role-kpis, .role-kpis-5 { grid-template-columns: 1fr 1fr !important; }
 }
