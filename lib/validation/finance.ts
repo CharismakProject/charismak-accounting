@@ -23,7 +23,7 @@ export const APPROVAL_REQUEST_TYPES = new Set([
   "variation",
   "company_expense",
 ]);
-export const FINANCIAL_ACCOUNT_TYPES = new Set(["bank", "fintech_wallet", "cash", "credit_card", "other"]);
+export const FINANCIAL_ACCOUNT_TYPES = new Set(["bank", "fintech_wallet", "cash", "petty_cash", "site_imprest", "loan_credit", "other"]);
 
 export function requiredPositiveMoney(value: FormDataEntryValue | string | number | null | undefined, label = "Amount") {
   const raw = String(value ?? "").trim();
