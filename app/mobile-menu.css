@@ -1,5 +1,5 @@
 .mobile-bottom-nav,.mobile-menu-drawer,.mobile-menu-backdrop{display:none}
-@media(max-width:900px){
+@media(max-width:900px),(hover:none) and (pointer:coarse){
   body{padding-bottom:76px}
   .mobile-bottom-nav{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;z-index:1200;left:0;right:0;bottom:0;height:calc(62px + env(safe-area-inset-bottom));padding:6px max(7px,env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-right));background:rgba(255,255,255,.98);border-top:1px solid #dce5ec;box-shadow:0 -7px 24px rgba(10,44,67,.09);backdrop-filter:blur(12px)}
   .mobile-bottom-nav a,.mobile-bottom-nav button{min-width:0;border:0;background:transparent;text-decoration:none;color:#718192;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:11px;font:inherit;padding:3px 2px}
