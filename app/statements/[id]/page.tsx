@@ -34,7 +34,8 @@ export default async function StatementReviewPage({params,searchParams}:{params:
   }
 
   const {data:projects}=await supabase.from("projects").select("id,project_code,name").eq("company_id",statement.company_id).in("status",["draft","active","on_hold"]).order("name");
-  const {data:discoveryRaw}=Number((statement as any).rows_total??0)>0?await supabase.rpc("statement_project_discovery_summary",{target_import:id}):{data:null} as any;
+  const isSavingsLedger=/saving|owealth/i.test(String((statement as any).detected_account_name||""));
+  const {data:discoveryRaw}=!isSavingsLedger&&Number((statement as any).rows_total??0)>0?await supabase.rpc("statement_project_discovery_summary",{target_import:id}):{data:null} as any;
   const discovery:any=discoveryRaw??{existing_projects:[],candidates:[]};
   const existingProjects:any[]=Array.isArray(discovery.existing_projects)?discovery.existing_projects:[];
   const candidates:any[]=Array.isArray(discovery.candidates)?discovery.candidates:[];
@@ -49,13 +50,13 @@ export default async function StatementReviewPage({params,searchParams}:{params:
   const candidateIn=candidates.reduce((sum:number,c:any)=>sum+Number(c.evidence?.money_in??0),0);
 
   return <main className="page-shell"><div className="content-wrap review-wrap">
-    <div className="page-actions"><div className="button-row"><Link href="/" className="text-link">← Dashboard</Link><Link href="/statements" className="text-link">Statement History</Link></div><div className="button-row"><Link href={`/statements/${id}/projects`} className="secondary-button">Project Signals</Link><Link href="/statements/upload" className="primary-link-button">Upload Next Statement</Link></div></div>
+    <div className="page-actions"><div className="button-row"><Link href="/" className="text-link">← Dashboard</Link><Link href="/statements" className="text-link">Statement History</Link></div><div className="button-row">{!isSavingsLedger&&<Link href={`/statements/${id}/projects`} className="secondary-button">Project Signals</Link>}<Link href="/statements/upload" className="primary-link-button">Upload Next Statement</Link></div></div>
     <header className="compact-header"><p className="mini-eyebrow">Import Review</p><h1>{(statement as any).detected_institution_name||"Bank Statement"} · {(statement as any).detected_account_name||"Account"}</h1><p>{document?.file_name} · {(statement as any).period_start||"Period unknown"} → {(statement as any).period_end||"—"}</p></header>
 
     {duplicateNotice&&<div className="notice notice-amber"><b>Exact duplicate detected.</b> Nothing was counted twice.</div>}
     {(statement as any).overlapping_import_id&&<div className="notice notice-blue"><b>Overlapping statement period.</b> Known rows are separated from genuinely new movements.</div>}
     {(statement as any).detected_as_new_account&&<div className="notice notice-green"><b>New financial account detected.</b> Future statements using this account identity will be compared against it.</div>}
-    {autoPosted>0&&<div className="notice notice-green"><b>{autoPosted.toLocaleString()} transactions posted automatically.</b> They had a unique high-confidence existing-project match. {pendingReview.toLocaleString()} unresolved transactions remain for review.</div>}
+    {autoPosted>0&&<div className="notice notice-green"><b>{autoPosted.toLocaleString()} transactions posted automatically.</b> {isSavingsLedger?"Savings transfers and interest were classified automatically.":"They had a unique high-confidence existing-project match."} {pendingReview.toLocaleString()} unresolved transactions remain for review.</div>}
     {confirmation==="posted"&&<div className="notice notice-green"><b>Transaction confirmed and posted.</b> Project totals were recalculated.</div>}
     {confirmation==="already"&&<div className="notice notice-amber"><b>Already recorded.</b> This statement row already has a primary accounting transaction.</div>}
     {bulkResolution&&<div className="notice notice-green"><b>{bulkCount.toLocaleString()} rows resolved.</b> The selected bulk decision was applied successfully.</div>}
@@ -66,7 +67,12 @@ export default async function StatementReviewPage({params,searchParams}:{params:
       {[["Statement rows",(statement as any).rows_total],["Auto-posted",autoPosted],["Needs action",pendingReview],["Already known",known],["Parser exceptions",parserExceptions]].map(([label,value])=><div className="mini-card" key={String(label)}><small>{label}</small><b>{value}</b></div>)}
     </section>
 
-    {Number((statement as any).rows_total??0)>0&&<article className="review-card" style={{marginBottom:14}}>
+    {Number((statement as any).rows_total??0)>0&&isSavingsLedger&&<article className="review-card" style={{marginBottom:14}}>
+      <div className="review-card-head"><div><small>Account Intelligence</small><h2>Project matching is not needed for this savings ledger</h2></div></div>
+      <p style={{margin:0,color:"#65778b",fontSize:13,lineHeight:1.55}}>OPay Savings / OWealth is an internal savings account. Deposits and withdrawals are treated as transfers between your own accounts, while earned interest is company income. Charismak therefore skips project-keyword discovery here instead of presenting false project signals.</p>
+    </article>}
+
+    {Number((statement as any).rows_total??0)>0&&!isSavingsLedger&&<article className="review-card" style={{marginBottom:14}}>
       <div className="review-card-head"><div><small>Project Intelligence</small><h2>{candidates.length?`${candidates.length} possible new project/site signals`:`${existingProjects.length} existing project matches`}</h2></div><DiscoverProjectsButton importId={id} compact={existingProjects.length>0||candidates.length>0}/></div>
       <p style={{margin:"0 0 11px",color:"#65778b",fontSize:11,lineHeight:1.5}}>Known project matches can post automatically. New tags such as PCC, STW or SRT stay as suggestions until you create or link the real project.</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(135px,1fr))",gap:8,marginBottom:11}}>
