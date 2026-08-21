@@ -27,9 +27,9 @@ import GlobalAddButton from "./GlobalAddButton";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Charismak Accounting",
-  description: "Construction accounting, cost control and treasury platform",
-  applicationName: "Charismak Accounting",
+  title: "Charismak Construction Accounting",
+  description: "Construction accounting, project cost control, treasury, approvals and document intelligence",
+  applicationName: "Charismak Construction Accounting",
 };
 
 export const viewport: Viewport = {

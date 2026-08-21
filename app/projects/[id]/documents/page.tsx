@@ -1,23 +1,16 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "../../../../lib/supabase/server";
-import { uploadProjectDocuments, retryProjectDocumentAnalysis, confirmProjectDocument } from "./actions";
+import { retryProjectDocumentAnalysis, confirmProjectDocument } from "./actions";
 import { acceptDocumentInterpretation } from "./simple-actions";
 import DeleteDocumentButton from "./DeleteDocumentButton";
+import UniversalIntakeV3 from "../../../add/UniversalIntakeV3";
 
 const money=(v:any)=>v==null?"—":new Intl.NumberFormat("en-NG",{style:"currency",currency:"NGN",maximumFractionDigits:2}).format(Number(v));
 const label=(v:any)=>String(v??"other").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
 
 function humanMeaning(intel:any,app:any){
-  if(app){
-    if(app.commercial_role==="base_scope")return "Base project scope";
-    if(app.commercial_role==="additional_scope")return "Additional / new project scope";
-    if(app.commercial_role==="variation")return "Variation to an existing scope";
-    if(app.billing_role==="client_invoice")return "Client invoice";
-    if(app.effect==="funding_reconciliation_evidence")return "Funding / retirement evidence";
-    if(app.effect==="funding_request_evidence")return "Funding request evidence";
-    return "Project evidence";
-  }
+  if(app){if(app.commercial_role==="base_scope")return "Base project scope";if(app.commercial_role==="additional_scope")return "Additional / new project scope";if(app.commercial_role==="variation")return "Variation to an existing scope";if(app.billing_role==="client_invoice")return "Client invoice";if(app.effect==="funding_reconciliation_evidence")return "Funding / retirement evidence";if(app.effect==="funding_request_evidence")return "Funding request evidence";return "Project evidence";}
   const k=String(intel?.detected_subtype||"");const t=String(intel?.raw_text_preview||"").toLowerCase();
   if(k==="boq"||k==="quotation")return "Likely base project scope / commercial proposal";
   if(k==="variation")return intel?.related_reference?"Likely variation to an earlier scope":"Likely additional / new project scope";
@@ -43,19 +36,14 @@ export default async function ProjectDocumentsPage({params,searchParams}:{params
   const confirmed=(docs??[]).filter((d:any)=>intelBy.get(d.id)?.review_status==="confirmed");
 
   return <main className="simple-shell project-doc-page"><div className="simple-wrap">
-    <div className="simple-top"><Link href={`/projects/${id}`}>← Project overview</Link><Link href="/add">+ Add anything</Link></div>
+    <div className="simple-top"><Link href={`/projects/${id}`}>← Project overview</Link><span style={{display:"flex",gap:12}}><Link href="/documents">All documents</Link><Link href="/add">+ Add anything</Link></span></div>
     <header className="document-page-head"><span>PROJECT DOCUMENTS</span><h1>{project.name}</h1><p>Upload what you already use. Charismak reads the documents, connects related scopes, and tells you what it thinks each one should change before it becomes official.</p></header>
     {q.deleted&&<div className="smart-success">Document deleted from the active project record. The audit trail still records the deletion.</div>}
 
-    <section className="commercial-tree-card">
-      <div><small>Current identified commercial value</small><strong>{money(commercial?.identified_commercial_value)}</strong><p>What the confirmed documents currently say this project is worth.</p></div>
-      <div className="commercial-tree-grid"><span><b>{money(commercial?.base_scope)}</b><small>Base scope</small></span><span><b>{money(commercial?.additional_scope)}</b><small>Additional scope</small></span><span><b>{money(commercial?.variations)}</b><small>Variations</small></span><span><b>{money(commercial?.documented_client_invoices)}</b><small>Client invoices</small></span></div>
-    </section>
+    <section className="commercial-tree-card"><div><small>Current identified commercial value</small><strong>{money(commercial?.identified_commercial_value)}</strong><p>What the confirmed documents currently say this project is worth.</p></div><div className="commercial-tree-grid"><span><b>{money(commercial?.base_scope)}</b><small>Base scope</small></span><span><b>{money(commercial?.additional_scope)}</b><small>Additional scope</small></span><span><b>{money(commercial?.variations)}</b><small>Variations</small></span><span><b>{money(commercial?.documented_client_invoices)}</b><small>Client invoices</small></span></div></section>
 
-    <form action={uploadProjectDocuments} encType="multipart/form-data" className="smart-doc-upload">
-      <input type="hidden" name="project_id" value={id}/><label><input type="file" name="documents" multiple accept=".pdf,.csv,.xlsx,.xls,.docx,.jpg,.jpeg,.png,.webp"/><strong>Add project files</strong><span>Select several files together. PDF, Excel, Word and images are retained as evidence.</span></label><button type="submit">Upload & understand</button>
-    </form>
-    {(q.uploaded||q.accepted)&&<div className="smart-success">{q.accepted?"Document accepted and project position refreshed.":`${q.uploaded||0} document(s) uploaded. Review only the items Charismak could not apply confidently.`}</div>}
+    <UniversalIntakeV3 companyId={project.company_id} projects={[project]} defaultProjectId={id} embedded />
+    {q.accepted&&<div className="smart-success">Document accepted and project position refreshed.</div>}
 
     {!!pending.length&&<section className="smart-section"><div className="smart-section-title"><span>NEEDS YOUR EYES</span><h2>{pending.length} item{pending.length===1?"":"s"} need confirmation</h2><p>You should mainly be confirming Charismak's interpretation—not doing the interpretation yourself.</p></div>{pending.map((doc:any)=>{const intel:any=intelBy.get(doc.id);const lines=Array.isArray(intel?.extracted_line_items)?intel.extracted_line_items:[];return <article key={doc.id} className="smart-doc-card">
       <div className="smart-doc-top"><div><small>{label(intel?.detected_subtype||doc.document_type)} · {Math.round(Number(intel?.confidence||0))}% confidence</small><h3>{intel?.title||doc.file_name}</h3><p>{doc.file_name}</p></div><strong>{money(intel?.grand_total??doc.amount)}</strong></div>
