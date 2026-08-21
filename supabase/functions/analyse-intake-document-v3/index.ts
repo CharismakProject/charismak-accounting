@@ -1,137 +1,60 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import * as XLSX from "npm:xlsx@0.18.5";
+import { unzipSync, strFromU8 } from "npm:fflate@0.8.2";
 
 const H={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS"};
 const out=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{...H,"content-type":"application/json"}});
-const norm=(s:unknown)=>String(s??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-const compact=(s:unknown)=>norm(s).replace(/\s/g,"");
-const safe=(s:string)=>s.replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120);
+const norm=(v:unknown)=>String(v??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+const compact=(v:unknown)=>norm(v).replace(/\s/g,"");
+const key=(v:unknown)=>String(v??"").trim().toLowerCase().replace(/ngn|naira/g,"").replace(/[^a-z0-9]/g,"");
+const xmlDecode=(s:string)=>s.replace(/&#x([0-9a-f]+);/gi,(_,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(Number(d))).replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,"&");
+const attr=(s:string,name:string)=>{const m=s.match(new RegExp(`(?:^|\\s)${name.replace(":","\\:")}="([^"]*)"`));return m?xmlDecode(m[1]):null};
+const textTags=(s:string)=>Array.from(s.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)).map(m=>xmlDecode(m[1])).join("");
+const safe=(s:string)=>s.replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,100);
 
-function institution(text:string){
-  const t=` ${text.toLowerCase()} `;
-  const banks:[string,string][]=[
-    ["opay","OPay"],["access bank","Access Bank"],["united bank for africa","UBA"],[" uba ","UBA"],
-    ["carbon","Carbon"],["gtbank","GTBank"],["guaranty trust","GTBank"],["zenith","Zenith Bank"],
-    ["stanbic","Stanbic IBTC"],["first bank","First Bank"],["fcmb","FCMB"],["fidelity","Fidelity Bank"],
-    ["moniepoint","Moniepoint"],["palmpay","PalmPay"],["kuda","Kuda"],["sterling bank","Sterling Bank"],
-    ["wema bank","Wema Bank"],["alat","Wema Bank"],["union bank","Union Bank"],["polaris","Polaris Bank"],
-    ["ecobank","Ecobank"],["keystone","Keystone Bank"],["providus","Providus Bank"],["jaiz","Jaiz Bank"],
-    ["globus","Globus Bank"],["standard chartered","Standard Chartered"],["citibank","Citibank"]
-  ];
-  for(const [key,name] of banks)if(t.includes(key))return name;
-  return null;
-}
+const A={
+ date:new Set(["transactiondate","date","transdate","postingdate","posteddate","transactiontime","transactiondatetime"]),
+ value:new Set(["valuedate","effectivedate"]),
+ narr:new Set(["description","narration","transactiondetails","details","remarks","remark","memo","transactiondescription"]),
+ ref:new Set(["transactionreference","reference","referenceno","referencenumber","ref","transactionref"]),
+ party:new Set(["counterparty","beneficiary","payer","payee","sender","recipient"]),
+ debit:new Set(["debit","debitamount","withdrawal","withdrawals","moneyout"]),
+ credit:new Set(["credit","creditamount","deposit","deposits","moneyin"]),
+ amount:new Set(["amount","transactionamount","debitcredit","debitcreditamount","transactionvalue"]),
+ balance:new Set(["balance","runningbalance","closingbalance","availablebalance","balanceaftertransaction","balanceafter","accountbalance","walletbalance","availablebalanceaftertransaction","postbalance"]),
+ type:new Set(["type","transactiontype","drcr","debitcreditindicator"])
+};
+const col=(h:string[],set:Set<string>)=>h.findIndex(x=>set.has(key(x)));
+const money=(v:unknown)=>{if(typeof v==="number"&&Number.isFinite(v))return v;let s=String(v??"").trim();if(!s||s==="--"||s==="-")return null;const dr=/\bDR\b/i.test(s)||/^\(.*\)$/.test(s);const cr=/\bCR\b/i.test(s);s=s.replace(/[₦,$]/g,"").replace(/NGN|\bDR\b|\bCR\b/gi,"").replace(/^N(?=\s*\d)/i,"").replace(/[()\s]/g,"");const n=Number(s);if(!Number.isFinite(n))return null;return dr?-Math.abs(n):cr?Math.abs(n):n};
+const months:{[k:string]:number}={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function date(v:unknown){const s=String(v??"").trim();if(!s)return null;if(/^\d{4,6}(?:\.\d+)?$/.test(s)){const n=Number(s);if(n>20000&&n<80000){const d=new Date(Date.UTC(1899,11,30)+Math.floor(n)*86400000);return d.toISOString().slice(0,10);}}let m=s.match(/^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})/);if(m)return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;m=s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);if(m){const y=m[3].length===2?2000+Number(m[3]):Number(m[3]);return `${y}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;}m=s.match(/^(\d{1,2})[-\s]+([A-Za-z]{3})[-\s]+(\d{2,4})/);if(m&&months[m[2].toLowerCase()]){const y=m[3].length===2?2000+Number(m[3]):Number(m[3]);return `${y}-${String(months[m[2].toLowerCase()]).padStart(2,"0")}-${m[1].padStart(2,"0")}`;}return null;}
+function institution(text:string){const t=` ${text.toLowerCase()} `;if(/\bowealth\b/.test(t))return "OPay";const banks:[string,string][]=[["opay","OPay"],["access bank","Access Bank"],["united bank for africa","UBA"],[" uba ","UBA"],["carbon","Carbon"],["gtbank","GTBank"],["guaranty trust","GTBank"],["zenith","Zenith Bank"],["stanbic","Stanbic IBTC"],["first bank","First Bank"],["fcmb","FCMB"],["fidelity","Fidelity Bank"],["moniepoint","Moniepoint"],["palmpay","PalmPay"],["kuda","Kuda"],["sterling bank","Sterling Bank"],["wema bank","Wema Bank"],["alat","Wema Bank"],["union bank","Union Bank"],["polaris","Polaris Bank"],["ecobank","Ecobank"],["keystone","Keystone Bank"],["providus","Providus Bank"],["jaiz","Jaiz Bank"],["globus","Globus Bank"],["standard chartered","Standard Chartered"],["citibank","Citibank"]];for(const [k,n] of banks)if(t.includes(k))return n;return null;}
 function accountNumber(text:string){for(const re of [/(?:account\s*(?:number|no\.?|#))\s*[:\-]?\s*([0-9*Xx-]{6,20})/i,/\b([0-9]{10})\b/]){const m=text.match(re);if(m)return m[1].replace(/\s/g,"")}return null;}
-function looksStatement(text:string,headers:string[]=[]){const t=text.toLowerCase();const header=norm(headers.join(" "));let s=0;if(/statement of account|account statement|transaction history|bank statement/.test(t))s+=4;if(/opening balance|closing balance|running balance/.test(t))s+=2;if(/debit/.test(t)&&/credit/.test(t)&&/balance/.test(t))s+=3;if(/transaction date|value date|reference/.test(t))s+=2;if(header.includes("date")&&(header.includes("debit")||header.includes("credit")||header.includes("amount"))&&(header.includes("balance")||header.includes("description")||header.includes("narration")))s+=5;return s>=5;}
-function accountKind(name:string,text=""){const n=norm(`${name} ${text.slice(0,12000)}`);if(/saving|owealth|wealth|interest earned|auto save/.test(n))return "savings";if(/wallet|main account/.test(n))return "wallet";return "account";}
-function accountLabel(bank:string,sheet:string,kind:string){return kind==="savings"?`${bank} Savings`:kind==="wallet"?`${bank} Wallet`:`${bank} ${sheet.replace(/transactions?/ig,"").trim()||"Account"}`;}
-async function sha256(bytes:Uint8Array){const d=await crypto.subtle.digest("SHA-256",bytes);return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,"0")).join("");}
-function previewRows(ws:any,maxRows=220){const ref=ws?.["!ref"];if(!ref)return [] as unknown[][];const r=XLSX.utils.decode_range(ref);const range={s:{r:0,c:0},e:{r:Math.min(r.e.r,maxRows-1),c:Math.min(r.e.c,20)}};return XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:false,blankrows:false,range}) as unknown[][];}
-function readOneSheet(bytes:Uint8Array,name:string){const wb=XLSX.read(bytes,{type:"array",sheets:[name],raw:false,cellDates:true,dense:true,cellStyles:false,cellNF:false,cellHTML:false});return wb.Sheets[name];}
+function accountKind(name:string,text:string){const sheet=norm(name);if(/saving|owealth|wealth/.test(sheet))return "savings";if(/wallet|main account/.test(sheet))return "wallet";const n=norm(text.slice(0,16000));if(/saving|owealth|wealth|interest earned|auto save/.test(n))return "savings";if(/wallet|main account/.test(n))return "wallet";return "account";}
+function accountLabel(bank:string,sheet:string,kind:string){if(kind==="savings")return `${bank} Savings`;if(kind==="wallet")return `${bank} Wallet`;return `${bank} · ${sheet.replace(/transactions?/ig,"").trim()||"Account"}`;}
+async function shaText(text:string){const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text));return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,"0")).join("");}
+function colIndex(ref:string){const m=ref.match(/^([A-Z]+)/i);if(!m)return 0;let n=0;for(const ch of m[1].toUpperCase())n=n*26+ch.charCodeAt(0)-64;return Math.max(0,n-1);}
+function parseShared(xml:string){return Array.from(xml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)).map(m=>textTags(m[1]));}
+function cellValue(attrs:string,body:string|undefined,shared:string[]){const t=attr(attrs,"t")||"";if(!body)return "";if(t==="inlineStr")return textTags(body);const vm=body.match(/<v\b[^>]*>([\s\S]*?)<\/v>/);const raw=vm?xmlDecode(vm[1]):"";if(t==="s"){const i=Number(raw);return Number.isInteger(i)&&shared[i]!==undefined?shared[i]:raw;}return raw;}
+function parseRow(body:string,shared:string[]){const values:string[]=[];for(const m of body.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)){const ref=attr(m[1],"r")||"A1";values[colIndex(ref)]=cellValue(m[1],m[2],shared);}return values.map(v=>v??"");}
+type ParsedRow={date:string;valueDate:string|null;narration:string;reference:string|null;counterparty:string|null;debit:number|null;credit:number|null;amount:number|null;balance:number|null;source:number;confidence:number};
+function parseSheet(sheetName:string,xml:string,shared:string[]){let best:{rowNo:number;headers:string[];score:number}|null=null;const preview:string[]=[];let seen=0;for(const m of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)){const rowNo=Number(attr(m[1],"r")||seen+1);const r=parseRow(m[2],shared);if(seen<220)preview.push(r.join(" | "));if(seen<80){const score=(col(r,A.date)>=0?3:0)+(col(r,A.narr)>=0?3:0)+((col(r,A.amount)>=0||col(r,A.debit)>=0||col(r,A.credit)>=0)?3:0)+(col(r,A.balance)>=0?1:0);if(!best||score>best.score)best={rowNo,headers:r,score};}seen++;if(seen>=220&&best&&best.score>=6)break;}
+ if(!best||best.score<6)return null;
+ const h=best.headers,dc=col(h,A.date),vc=col(h,A.value),nc=col(h,A.narr),rc=col(h,A.ref),pc=col(h,A.party),dbc=col(h,A.debit),crc=col(h,A.credit),ac=col(h,A.amount),bc=col(h,A.balance),tc=col(h,A.type);const rows:ParsedRow[]=[];
+ for(const m of xml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)){const rowNo=Number(attr(m[1],"r")||0);if(rowNo<=best.rowNo)continue;const r=parseRow(m[2],shared);const d=date(r[dc]);if(!d)continue;const db=dbc>=0?money(r[dbc]):null,cr=crc>=0?money(r[crc]):null,am=ac>=0?money(r[ac]):null;let x:number|null=null,debit:number|null=null,credit:number|null=null;if(cr!==null&&cr!==0){x=Math.abs(cr);credit=Math.abs(cr);}else if(db!==null&&db!==0){x=-Math.abs(db);debit=Math.abs(db);}else if(am!==null){const typ=tc>=0?String(r[tc]??"").toLowerCase():"";if(/debit|withdraw|\bdr\b/.test(typ)){x=-Math.abs(am);debit=Math.abs(am);}else if(/credit|deposit|\bcr\b/.test(typ)){x=Math.abs(am);credit=Math.abs(am);}else x=am;}if(x===null)continue;rows.push({date:d,valueDate:vc>=0?date(r[vc]):null,narration:nc>=0?String(r[nc]??"").trim()||"Statement transaction":"Statement transaction",reference:rc>=0?String(r[rc]??"").trim()||null:null,counterparty:pc>=0?String(r[pc]??"").trim()||null:null,debit,credit,amount:x,balance:bc>=0?money(r[bc]):null,source:rowNo,confidence:.99});}
+ return {name:sheetName,preview:preview.join("\n"),headers:h,rows};
+}
+function workbookParts(bytes:Uint8Array){const zip=unzipSync(bytes);const get=(name:string)=>{const b=zip[name];if(!b)throw new Error(`Workbook part missing: ${name}`);return strFromU8(b)};const shared=zip["xl/sharedStrings.xml"]?parseShared(strFromU8(zip["xl/sharedStrings.xml"])):[];const wb=get("xl/workbook.xml");const rel=get("xl/_rels/workbook.xml.rels");const rels=new Map<string,string>();for(const m of rel.matchAll(/<Relationship\b([^>]*?)\/>/g)){const id=attr(m[1],"Id"),target=attr(m[1],"Target");if(id&&target)rels.set(id,target.replace(/^\//,""));}const sheets:{name:string;path:string}[]=[];for(const m of wb.matchAll(/<sheet\b([^>]*?)\/>/g)){const name=attr(m[1],"name"),rid=attr(m[1],"r:id");if(!name||!rid)continue;let target=rels.get(rid);if(!target)continue;if(!target.startsWith("xl/"))target=`xl/${target}`;sheets.push({name,path:target});}return {zip,shared,sheets};}
 
-Deno.serve(async(req:Request)=>{
-  if(req.method==="OPTIONS")return new Response("ok",{headers:H});
-  if(req.method!=="POST")return out({error:"POST required"},405);
-  const auth=req.headers.get("Authorization")??"";
-  const anon=Deno.env.get("SUPABASE_ANON_KEY")!;
-  const url=Deno.env.get("SUPABASE_URL")!;
-  const sb=createClient(url,anon,{global:{headers:{Authorization:auth}}});
-  const {data:{user}}=await sb.auth.getUser();if(!user)return out({error:"Sign in again."},401);
-  const body=await req.json().catch(()=>({}));
-  const documentId=String(body?.documentId??"");const batchId=String(body?.batchId??"");
-  if(!documentId||!batchId)return out({error:"documentId and batchId are required"},400);
-  const {data:doc,error:de}=await sb.from("source_documents").select("id,company_id,project_id,file_name,storage_path,metadata").eq("id",documentId).single();if(de||!doc)return out({error:de?.message||"Document not found"},404);
-  const {data:item}=await sb.from("intake_items").select("id").eq("document_id",documentId).eq("batch_id",batchId).maybeSingle();if(!item)return out({error:"Intake item not found"},404);
-
-  const proxyGeneric=async()=>{const proxied=await fetch(`${url}/functions/v1/analyse-intake-document`,{method:"POST",headers:{Authorization:auth,apikey:anon,"content-type":"application/json"},body:JSON.stringify({documentId,batchId})});const payload=await proxied.json().catch(()=>({error:"Analysis returned an unreadable response."}));return out(payload,proxied.status);};
-
-  try{
-    const ext=String((doc.metadata as any)?.extension??doc.file_name.split(".").pop()??"").toLowerCase();
-    if(!["xlsx","xls"].includes(ext))return await proxyGeneric();
-
-    const bucket=String((doc.metadata as any)?.bucket||"universal-intake");
-    const {data:blob,error:be}=await sb.storage.from(bucket).download(doc.storage_path);if(be||!blob)throw new Error(be?.message||"Could not read uploaded workbook");
-    const bytes=new Uint8Array(await blob.arrayBuffer());
-    const meta=XLSX.read(bytes,{type:"array",bookSheets:true});
-    const statementSheets:{name:string;text:string;headers:string[]}[]=[];
-    for(const name of meta.SheetNames){
-      const ws=readOneSheet(bytes,name);const rows=previewRows(ws,220);let header:unknown[]=[];
-      for(const row of rows.slice(0,50))if(row.filter(Boolean).length>header.filter(Boolean).length)header=row;
-      const headers=header.map(String);const text=rows.map(r=>r.map(v=>String(v??"")).join(" | ")).join("\n");
-      if(looksStatement(`${name}\n${text}`,headers))statementSheets.push({name,text,headers});
-    }
-    if(statementSheets.length===0)return await proxyGeneric();
-
-    const {data:loadedAccounts}=await sb.from("financial_accounts").select("id,institution_name,institution_key,account_name,account_number_masked,account_type").eq("company_id",doc.company_id).eq("is_active",true);
-    const accounts:any[]=[...(loadedAccounts??[])];
-
-    const resolveAccount=async(s:{name:string;text:string})=>{
-      const detectedBank=institution(`${doc.file_name}\n${s.name}\n${s.text}`);
-      const bank=detectedBank||"Bank / financial account";
-      const acctNo=accountNumber(s.text);
-      const kind=accountKind(s.name,s.text);
-      const label=accountLabel(bank,s.name,kind);
-      const targetNo=String(acctNo??"").replace(/[^0-9]/g,"");
-      const sameNumber=targetNo?accounts.filter((a:any)=>String(a.account_number_masked??"").replace(/[^0-9]/g,"")===targetNo):[];
-      const sameBank=detectedBank?accounts.filter((a:any)=>compact(a.institution_name)===compact(bank)||compact(a.institution_key).startsWith(compact(bank))):accounts;
-      let account:any=null;
-      if(kind==="savings")account=sameBank.find((a:any)=>/saving|owealth|wealth/.test(norm(`${a.account_name} ${a.institution_key}`)))??null;
-      else if(kind==="wallet")account=sameBank.find((a:any)=>/wallet/.test(norm(`${a.account_name} ${a.institution_key}`)))??null;
-      if(!account&&sameNumber.length===1)account=sameNumber[0];
-      if(!account&&kind==="account"&&sameBank.length===1)account=sameBank[0];
-      if(!account&&!detectedBank)return {account:null,bank,acctNo,kind,label};
-      if(!account){
-        const {data:created,error:ce}=await sb.from("financial_accounts").insert({company_id:doc.company_id,account_type:/opay|carbon|moniepoint|palmpay|kuda/i.test(bank)?"fintech_wallet":"bank",institution_name:bank,institution_key:`${compact(bank)}_${kind}`,account_name:label,account_number_masked:acctNo,created_by:user.id}).select("id,institution_name,account_name,account_number_masked,account_type,institution_key").single();
-        if(ce||!created)throw new Error(ce?.message||`Could not create ${label}`);account=created;accounts.push(created);
-      }
-      return {account,bank,acctNo,kind,label};
-    };
-
-    // A one-sheet workbook is processed directly. This prevents a Savings/OWealth
-    // ledger sharing an account number with a Wallet ledger from being attached to
-    // the wrong account merely because the account number is identical.
-    if(statementSheets.length===1){
-      const s=statementSheets[0];const resolved=await resolveAccount(s);
-      if(!resolved.account){
-        await sb.from("source_documents").update({document_type:"bank_statement",project_id:null,metadata:{...(doc.metadata as any),bucket,universal_intake_type:"bank_statement",account_kind:resolved.kind}}).eq("id",documentId);
-        await sb.from("intake_items").update({detected_type:"bank_statement",detected_project_id:null,confidence:90,status:"needs_review",suggested_action:{action:"confirm_financial_account",institution:resolved.bank,account_number:resolved.acctNo,account_kind:resolved.kind},message:"Statement transactions were recognised, but the financial account needs confirmation before posting."}).eq("id",item.id);
-        return out({ok:true,type:"bank_statement",status:"needs_review",message:"Financial account confirmation needed."});
-      }
-      await sb.from("source_documents").update({document_type:"bank_statement",project_id:null,source_name:resolved.bank,metadata:{...(doc.metadata as any),bucket,universal_intake_type:"bank_statement",detected_institution:resolved.bank,detected_account_number:resolved.acctNo,account_kind:resolved.kind,source_sheet:s.name}}).eq("id",documentId);
-      let {data:imp}=await sb.from("statement_imports").select("id,status,rows_total").eq("document_id",documentId).maybeSingle();
-      if(!imp){const {data:createdImp,error:ie}=await sb.from("statement_imports").insert({document_id:documentId,company_id:doc.company_id,financial_account_id:resolved.account.id,detected_institution_name:resolved.bank,detected_account_name:resolved.account.account_name,detected_account_number_masked:resolved.acctNo,status:"uploaded",detected_as_new_account:false,rows_total:0,rows_new:0,rows_already_known:0,rows_need_review:0}).select("id,status,rows_total").single();if(ie||!createdImp)throw new Error(ie?.message||"Could not create statement import");imp=createdImp;}
-      else await sb.from("statement_imports").update({financial_account_id:resolved.account.id,detected_institution_name:resolved.bank,detected_account_name:resolved.account.account_name,detected_account_number_masked:resolved.acctNo}).eq("id",imp.id);
-      const analysed=await fetch(`${url}/functions/v1/analyse-statement`,{method:"POST",headers:{Authorization:auth,apikey:anon,"content-type":"application/json"},body:JSON.stringify({importId:imp.id})});
-      const result=await analysed.json().catch(()=>({}));
-      const status=analysed.ok?"applied":"needs_review";
-      const rows=Number(result?.rows_total??result?.rows??result?.totalRows??0);
-      await sb.from("intake_items").update({detected_type:"bank_statement",detected_project_id:null,confidence:99,status,suggested_action:{action:"open_statement",statement_import_id:imp.id},message:analysed.ok?`Statement processed as ${resolved.account.account_name}. ${rows} transaction rows found.`:(result?.error||"Statement needs review.")}).eq("id",item.id);
-      return out({ok:true,type:"bank_statement",status,statementImportId:imp.id,statementAccounts:[resolved.account.account_name],rows,message:analysed.ok?`Processed ${resolved.account.account_name}.`:(result?.error||"Statement needs review")});
-    }
-
-    const imports:any[]=[];let totalRows=0;let failed=0;
-    for(let i=0;i<statementSheets.length;i++){
-      const s=statementSheets[i];const resolved=await resolveAccount(s);
-      if(!resolved.account){failed++;imports.push({sheet:s.name,account:resolved.label,status:"needs_review",message:"Financial account confirmation needed"});continue;}
-      const ws=readOneSheet(bytes,s.name);const childWb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(childWb,ws,s.name.slice(0,31));
-      const childBytes=new Uint8Array(XLSX.write(childWb,{type:"array",bookType:"xlsx",bookSST:false}));const childHash=await sha256(childBytes);
-      const {data:existingChild}=await sb.from("source_documents").select("id,storage_path,metadata").eq("company_id",doc.company_id).eq("document_type","bank_statement").eq("file_hash",childHash).limit(1).maybeSingle();let child:any=existingChild;
-      if(!child){
-        const childPath=`${doc.company_id}/intake/split/${new Date().getUTCFullYear()}/${documentId}-${i+1}-${safe(s.name)}.xlsx`;
-        const {error:ue}=await sb.storage.from("universal-intake").upload(childPath,childBytes,{contentType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",upsert:true});if(ue)throw new Error(ue.message);
-        const {data:createdDoc,error:cde}=await sb.from("source_documents").insert({company_id:doc.company_id,project_id:null,document_type:"bank_statement",file_name:`${doc.file_name.replace(/\.[^.]+$/,"")} - ${s.name}.xlsx`,storage_path:childPath,file_hash:childHash,source_name:resolved.bank,metadata:{bucket:"universal-intake",extension:"xlsx",parent_document_id:documentId,source_sheet:s.name,generated_from_multi_sheet:true,account_kind:resolved.kind},uploaded_by:user.id}).select("id,storage_path,metadata").single();if(cde||!createdDoc)throw new Error(cde?.message||"Could not register split statement");child=createdDoc;
-      }
-      let {data:imp}=await sb.from("statement_imports").select("id,status,rows_total").eq("document_id",child.id).maybeSingle();
-      if(!imp){const {data:createdImp,error:ie}=await sb.from("statement_imports").insert({document_id:child.id,company_id:doc.company_id,financial_account_id:resolved.account.id,detected_institution_name:resolved.bank,detected_account_name:resolved.account.account_name,detected_account_number_masked:resolved.acctNo,status:"uploaded",detected_as_new_account:false,rows_total:0,rows_new:0,rows_already_known:0,rows_need_review:0}).select("id,status,rows_total").single();if(ie||!createdImp)throw new Error(ie?.message||"Could not create statement import");imp=createdImp;}
-      else await sb.from("statement_imports").update({financial_account_id:resolved.account.id,detected_institution_name:resolved.bank,detected_account_name:resolved.account.account_name,detected_account_number_masked:resolved.acctNo}).eq("id",imp.id);
-      const analysed=await fetch(`${url}/functions/v1/analyse-statement`,{method:"POST",headers:{Authorization:auth,apikey:anon,"content-type":"application/json"},body:JSON.stringify({importId:imp.id})});const result=await analysed.json().catch(()=>({}));
-      if(!analysed.ok){failed++;imports.push({sheet:s.name,account:resolved.account.account_name,importId:imp.id,status:"needs_review",message:result?.error||"Statement needs review"});continue;}
-      const rows=Number(result?.rows_total??result?.rows??result?.totalRows??0);totalRows+=rows;imports.push({sheet:s.name,account:resolved.account.account_name,importId:imp.id,status:"applied",rows});
-    }
-    const applied=imports.filter(x=>x.status==="applied");const first=imports.find(x=>x.importId)?.importId;const message=failed?`${applied.length} of ${imports.length} statement sheets were processed separately; ${failed} need review.`:`Processed ${imports.length} statement sheets separately (${imports.map(x=>x.account).join(" + ")}).`;
-    await sb.from("source_documents").update({document_type:"bank_statement",project_id:null,source_name:imports.map(x=>x.account).join(" + "),metadata:{...(doc.metadata as any),bucket,universal_intake_type:"bank_statement_multi_sheet",split_statement_imports:imports}}).eq("id",documentId);
-    await sb.from("intake_items").update({detected_type:"bank_statement",detected_project_id:null,confidence:99,status:failed?"needs_review":"applied",suggested_action:{action:"open_statement",statement_import_id:first,statement_import_ids:imports.filter(x=>x.importId).map(x=>x.importId)},message}).eq("id",item.id);
-    return out({ok:true,type:"bank_statement",status:failed?"needs_review":"applied",statementImportId:first,statementImportIds:imports.filter(x=>x.importId).map(x=>x.importId),statementAccounts:imports.map(x=>x.account),rows:totalRows,message});
-  }catch(e){const msg=e instanceof Error?e.message:"Intake analysis failed";console.error("intake-v4 failed",msg);await sb.from("intake_items").update({status:"failed",message:msg}).eq("id",item.id);return out({error:msg},500);}
+Deno.serve(async(req:Request)=>{if(req.method==="OPTIONS")return new Response("ok",{headers:H});if(req.method!=="POST")return out({error:"POST required"},405);const auth=req.headers.get("Authorization")??"";const url=Deno.env.get("SUPABASE_URL")!;const anon=Deno.env.get("SUPABASE_ANON_KEY")!;const sb=createClient(url,anon,{global:{headers:{Authorization:auth}}});const {data:{user}}=await sb.auth.getUser();if(!user)return out({error:"Sign in again."},401);const body=await req.json().catch(()=>({}));const documentId=String(body?.documentId??"");const batchId=String(body?.batchId??"");if(!documentId||!batchId)return out({error:"documentId and batchId are required"},400);const {data:doc,error:de}=await sb.from("source_documents").select("id,company_id,project_id,file_name,storage_path,file_hash,metadata").eq("id",documentId).single();if(de||!doc)return out({error:de?.message||"Document not found"},404);const {data:item}=await sb.from("intake_items").select("id").eq("document_id",documentId).eq("batch_id",batchId).maybeSingle();if(!item)return out({error:"Intake item not found"},404);
+ const proxyGeneric=async()=>{const r=await fetch(`${url}/functions/v1/analyse-intake-document`,{method:"POST",headers:{Authorization:auth,apikey:anon,"content-type":"application/json"},body:JSON.stringify({documentId,batchId,documentTypeHint:body?.documentTypeHint,action:body?.action,keywords:body?.keywords})});const p=await r.json().catch(()=>({error:"Analysis returned an unreadable response."}));return out(p,r.status);};
+ try{const ext=String((doc.metadata as any)?.extension??doc.file_name.split(".").pop()??"").toLowerCase();if(ext!=="xlsx")return await proxyGeneric();const bucket=String((doc.metadata as any)?.bucket||"universal-intake");const {data:blob,error:be}=await sb.storage.from(bucket).download(doc.storage_path);if(be||!blob)throw new Error(be?.message||"Could not read uploaded workbook");const bytes=new Uint8Array(await blob.arrayBuffer());const parts=workbookParts(bytes);const statements:any[]=[];for(const s of parts.sheets){const raw=parts.zip[s.path];if(!raw)continue;const parsed=parseSheet(s.name,strFromU8(raw),parts.shared);if(parsed&&parsed.rows.length)statements.push(parsed);}if(!statements.length)return await proxyGeneric();
+ const {data:loaded}=await sb.from("financial_accounts").select("id,institution_name,institution_key,account_name,account_number_masked,account_type").eq("company_id",doc.company_id).eq("is_active",true);const accounts:any[]=[...(loaded??[])];
+ const resolveAccount=async(s:any)=>{const detected=institution(`${doc.file_name}\n${s.name}\n${s.preview}`);const bank=detected||"Imported Financial Account";const acctNo=accountNumber(s.preview);const kind=accountKind(s.name,s.preview);const label=accountLabel(bank,s.name,kind);const targetNo=String(acctNo??"").replace(/[^0-9]/g,"");const sameNo=targetNo?accounts.filter(a=>String(a.account_number_masked??"").replace(/[^0-9]/g,"")===targetNo):[];const sameBank=detected?accounts.filter(a=>compact(a.institution_name)===compact(bank)||compact(a.institution_key).startsWith(compact(bank))):[];const kindMatch=(a:any)=>kind==="savings"?/saving|owealth|wealth/.test(norm(`${a.account_name} ${a.institution_key}`)):kind==="wallet"?/wallet/.test(norm(`${a.account_name} ${a.institution_key}`)):true;let account=sameNo.find(kindMatch)||sameBank.find(kindMatch)||null;if(!account){const institutionKey=detected?`${compact(bank)}_${kind}`:`imported_${documentId.slice(0,8)}_${safe(s.name).toLowerCase().slice(0,20)}`;const {data:created,error:ce}=await sb.from("financial_accounts").insert({company_id:doc.company_id,account_type:/opay|carbon|moniepoint|palmpay|kuda/i.test(bank)?"fintech_wallet":"bank",institution_name:bank,institution_key:institutionKey,account_name:label,account_number_masked:acctNo,created_by:user.id}).select("id,institution_name,institution_key,account_name,account_number_masked,account_type").single();if(ce||!created)throw new Error(ce?.message||`Could not create ${label}`);account=created;accounts.push(created);}return {account,bank,acctNo,kind,label};};
+ const imports:any[]=[];let totalRows=0;for(const s of statements){const resolved=await resolveAccount(s);const virtualHash=await shaText(`${doc.file_hash||documentId}|sheet|${s.name}`);let {data:child}=await sb.from("source_documents").select("id,metadata").eq("company_id",doc.company_id).eq("file_hash",virtualHash).limit(1).maybeSingle();if(!child){const {data:c,error:ce}=await sb.from("source_documents").insert({company_id:doc.company_id,project_id:null,document_type:"bank_statement",file_name:`${doc.file_name.replace(/\.[^.]+$/,"")} - ${s.name}.xlsx`,storage_path:doc.storage_path,file_hash:virtualHash,source_name:resolved.bank,metadata:{bucket,extension:"xlsx",parent_document_id:documentId,source_sheet:s.name,virtual_sheet:true,account_kind:resolved.kind},uploaded_by:user.id}).select("id,metadata").single();if(ce||!c)throw new Error(ce?.message||"Could not register statement sheet");child=c;}else{await sb.from("source_documents").update({source_name:resolved.account.account_name,metadata:{...(child.metadata as any),bucket,source_sheet:s.name,virtual_sheet:true,account_kind:resolved.kind}}).eq("id",child.id);}
+ let {data:imp}=await sb.from("statement_imports").select("id,status,rows_total,rows_auto_posted").eq("document_id",child.id).maybeSingle();if(!imp){const {data:i,error:ie}=await sb.from("statement_imports").insert({document_id:child.id,company_id:doc.company_id,financial_account_id:resolved.account.id,detected_institution_name:resolved.bank,detected_account_name:resolved.account.account_name,detected_account_number_masked:resolved.acctNo,status:"parsing",detected_as_new_account:false,rows_total:0,rows_new:0,rows_already_known:0,rows_need_review:0}).select("id,status,rows_total,rows_auto_posted").single();if(ie||!i)throw new Error(ie?.message||"Could not create statement import");imp=i;}else{await sb.from("statement_imports").update({financial_account_id:resolved.account.id,detected_institution_name:resolved.bank,detected_account_name:resolved.account.account_name,detected_account_number_masked:resolved.acctNo,status:"parsing"}).eq("id",imp.id);if(!["confirmed","needs_review"].includes(String(imp.status))||Number(imp.rows_total||0)===0)await sb.from("statement_rows").delete().eq("import_id",imp.id);}
+ const {count:existingCount}=await sb.from("statement_rows").select("id",{count:"exact",head:true}).eq("import_id",imp.id);if(!existingCount){for(let start=0;start<s.rows.length;start+=300){const batch=s.rows.slice(start,start+300).map((r:any,i:number)=>({import_id:imp.id,row_index:start+i+1,transaction_date:r.date,value_date:r.valueDate,narration:r.narration,reference:r.reference,counterparty:r.counterparty,debit:r.debit,credit:r.credit,signed_amount:r.amount,running_balance:r.balance,detection_status:"new",raw_payload:{parser:"lightweight_xlsx_v2",source_sheet:s.name,source_row:r.source,parse_confidence:r.confidence}}));const {error:re}=await sb.from("statement_rows").insert(batch);if(re)throw new Error(re.message);}}
+ const {error:fe}=await sb.rpc("finalize_statement_import",{target_import:imp.id});if(fe)throw new Error(fe.message);const {data:autoClass,error:ae}=await sb.rpc("auto_classify_opay_account_movements",{target_import:imp.id});if(ae)console.warn("auto classify skipped",ae.message);const {data:finalized,error:fe2}=await sb.rpc("finalize_statement_import",{target_import:imp.id});if(fe2)throw new Error(fe2.message);const autoGenerated=Number((autoClass as any)?.internalTransfers||0)+Number((autoClass as any)?.interestIncome||0);const autoPosted=Math.max(Number((imp as any)?.rows_auto_posted||0),autoGenerated);const last=[...s.rows].reverse().find((r:any)=>r.balance!==null);await sb.from("statement_imports").update({closing_balance:last?.balance??null,rows_auto_posted:autoPosted,parser_name:"lightweight_xlsx_v2",parser_confidence:.99,parse_warnings:[],analysed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",imp.id);if(resolved.kind!=="savings")await sb.rpc("discover_statement_projects",{target_import:imp.id});const patch:any={last_statement_at:new Date().toISOString()};if(last){patch.current_balance=last.balance;patch.balance_as_of=last.date;}await sb.from("financial_accounts").update(patch).eq("id",resolved.account.id);totalRows+=s.rows.length;imports.push({sheet:s.name,account:resolved.account.account_name,importId:imp.id,status:String((finalized as any)?.status||"processed"),rows:s.rows.length});}
+ const first=imports[0]?.importId;const message=imports.length===1?`Processed ${imports[0].account}: ${imports[0].rows.toLocaleString()} transaction rows.`:`Processed ${imports.length} statement sheets separately: ${imports.map(x=>`${x.account} (${x.rows.toLocaleString()})`).join(" + ")}.`;await sb.from("source_documents").update({document_type:"bank_statement",project_id:null,source_name:imports.map(x=>x.account).join(" + "),metadata:{...(doc.metadata as any),bucket,universal_intake_type:imports.length>1?"bank_statement_multi_sheet":"bank_statement",split_statement_imports:imports}}).eq("id",documentId);await sb.from("intake_items").update({detected_type:"bank_statement",detected_project_id:null,confidence:99,status:"applied",suggested_action:{action:"open_statement",statement_import_id:first,statement_import_ids:imports.map(x=>x.importId)},message}).eq("id",item.id);return out({ok:true,type:"bank_statement",status:"applied",statementImportId:first,statementImportIds:imports.map(x=>x.importId),statementAccounts:imports.map(x=>x.account),rows:totalRows,message});
+ }catch(e){const msg=e instanceof Error?e.message:"Intake analysis failed";console.error("intake-v6 failed",msg);await sb.from("intake_items").update({status:"needs_review",message:msg}).eq("id",item.id);return out({error:msg},500);}
 });
