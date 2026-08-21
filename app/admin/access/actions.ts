@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../lib/supabase/server";
+import { parseOptionalNonNegativeMoney } from "../../../lib/accounting/guards";
 
 async function ownerContext() {
   const supabase = await createClient();
@@ -28,6 +29,8 @@ export async function saveRoleEmail(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const label = String(formData.get("display_label") || "").trim();
   if (!positionCode || !email) throw new Error("Position and email are required.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
+  if (label.length > 160) throw new Error("Display label is too long.");
 
   const { error } = await supabase.rpc("owner_save_role_email", {
     target_company: membership.company_id,
@@ -65,6 +68,7 @@ export async function assignProjectAccess(formData: FormData) {
   const projectId = String(formData.get("project_id") || "");
   const assignmentRole = String(formData.get("assignment_role") || "Assigned team member").trim();
   if (!membershipId || !projectId) throw new Error("Member and project are required.");
+  if (assignmentRole.length > 160) throw new Error("Assignment role is too long.");
 
   const { error } = await supabase.rpc("owner_assign_project_access", {
     target_company: membership.company_id,
@@ -100,9 +104,9 @@ export async function setMemberLimit(formData: FormData) {
   const membershipId = String(formData.get("membership_id") || "");
   const permissionCode = String(formData.get("permission_code") || "");
   const scope = String(formData.get("scope") || "");
-  const approvalRaw = String(formData.get("approval_limit") || "").trim();
-  const paymentRaw = String(formData.get("payment_limit") || "").trim();
   if (!membershipId || !permissionCode) throw new Error("Member and permission are required.");
+  const approvalLimit = parseOptionalNonNegativeMoney(formData.get("approval_limit"), "Approval limit");
+  const paymentLimit = parseOptionalNonNegativeMoney(formData.get("payment_limit"), "Payment limit");
 
   const { error } = await supabase.rpc("owner_set_member_limits", {
     target_company: membership.company_id,
@@ -110,8 +114,8 @@ export async function setMemberLimit(formData: FormData) {
     target_permission_code: permissionCode,
     target_allowed: formData.get("allowed") === "on",
     target_scope: scope || null,
-    target_approval_limit: approvalRaw ? Number(approvalRaw) : null,
-    target_payment_limit: paymentRaw ? Number(paymentRaw) : null,
+    target_approval_limit: approvalLimit,
+    target_payment_limit: paymentLimit,
   });
   if (error) throw new Error(error.message);
   revalidatePath("/admin/access");
