@@ -7,7 +7,7 @@ export const FINAL_TRANSACTION_CLASSIFICATIONS = new Set([
   "internal_transfer",
 ]);
 
-export const PROJECT_STATUSES = new Set(["draft", "active", "on_hold", "completed", "cancelled"]);
+export const PROJECT_STATUSES = new Set(["draft", "active", "on_hold", "completed", "archived"]);
 export const APPROVAL_URGENCIES = new Set(["normal", "urgent", "emergency"]);
 export const APPROVAL_REQUEST_TYPES = new Set([
   "purchase",
