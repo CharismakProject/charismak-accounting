@@ -10,7 +10,7 @@ export default async function Home() {
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
-  if (!user) redirect("/login");
+  if (!user) redirect("/welcome");
 
   const { data: membership } = await supabase
     .from("company_memberships")
@@ -19,14 +19,16 @@ export default async function Home() {
     .eq("status", "active")
     .limit(1)
     .maybeSingle();
-  if (!membership) redirect("/onboarding/company");
+  if (!membership) redirect("/welcome");
 
   const [{ data: company }, { data: positionRows }, { data: preference }, { data: assignments }] = await Promise.all([
-    supabase.from("companies").select("name").eq("id", membership.company_id).maybeSingle(),
+    supabase.from("companies").select("name,onboarding_completed").eq("id", membership.company_id).maybeSingle(),
     supabase.from("membership_positions").select("is_primary,position:positions(code,name,interface_family)").eq("membership_id", membership.id),
     supabase.from("user_interface_preferences").select("active_interface").eq("company_id", membership.company_id).eq("user_id", user.id).maybeSingle(),
     supabase.from("project_assignments").select("project_id,assignment_role,can_view_cost,can_request,can_approve").eq("membership_id", membership.id),
   ]);
+
+  if (membership.is_owner && !company?.onboarding_completed) redirect("/onboarding/start");
 
   const assignedFamilies = Array.from(new Set((positionRows ?? []).map((row: any) => row.position?.interface_family).filter(Boolean))) as RoleFamily[];
   const availableRoles = membership.is_owner ? allFamilies : assignedFamilies.length ? assignedFamilies : (["project_manager"] as RoleFamily[]);
@@ -72,7 +74,7 @@ export default async function Home() {
     institution_name: account.account_name || account.institution_name,
   }));
   const statementRows:any[] = statementResult.data ?? [];
-  const projectStatement = statementRows.find((row:any)=>!/saving|owealth/i.test(String(row.detected_account_name||"")));
+  const projectStatement = statementRows.find((row:any)=>Number(row.rows_total??0)>0);
 
   const projectIds = projects.map((p: any) => p.id);
   const visibleApprovals = projectScopedMember
@@ -91,7 +93,7 @@ export default async function Home() {
 
   return <>
     {projects.length===0&&<section style={{margin:"12px auto 0",width:"min(1180px,calc(100% - 24px))",border:"1px solid #cfe0e8",borderRadius:16,background:"linear-gradient(135deg,#f8fcff,#eef8f5)",padding:"16px 17px",display:"grid",gap:10}}>
-      <div><small style={{fontSize:9,fontWeight:900,letterSpacing:".13em",color:"#16745e"}}>START WITH WHAT YOU ALREADY HAVE</small><h2 style={{margin:"5px 0 4px",fontSize:20,color:"#14354d"}}>{projectStatement?"Your records are in. Turn the signals into your first projects.":"Do not rebuild your accounting from scratch."}</h2><p style={{margin:0,maxWidth:760,fontSize:12,lineHeight:1.55,color:"#63788a"}}>{projectStatement?"Charismak has a non-savings statement ready for project intelligence. Review the names and site tags it found, or search the statement with your own keywords, then create or link the real projects.":"Upload the bank statements, BOQs, quotations, invoices and receipts you already use. Tell Charismak what the file is and what you want done; it will organise the records and ask only for decisions that matter."}</p></div>
+      <div><small style={{fontSize:9,fontWeight:900,letterSpacing:".13em",color:"#16745e"}}>START WITH WHAT YOU ALREADY HAVE</small><h2 style={{margin:"5px 0 4px",fontSize:20,color:"#14354d"}}>{projectStatement?"Your records are in. Turn their signals into your first projects.":"Do not rebuild your accounting from scratch."}</h2><p style={{margin:0,maxWidth:760,fontSize:12,lineHeight:1.55,color:"#63788a"}}>{projectStatement?"Review the names, site tags and keywords found in the statement, or search it with your own keywords, then create or link the real projects.":"Upload financial statements, BOQs, quotations, invoices, bills and receipts you already use. Tell Charismak what each file is and what you want done; it will organise the records and ask only for decisions that matter."}</p></div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{projectStatement&&<Link href={`/statements/${projectStatement.id}/projects`} className="primary-link-button">Review statement project signals</Link>}<Link href="/add" className={projectStatement?"secondary-button":"primary-link-button"}>{projectStatement?"Add another record":"Upload existing records"}</Link><Link href="/projects/new" className="secondary-button">Create a project manually</Link></div>
     </section>}
     <ControlRoomClient
