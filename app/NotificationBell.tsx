@@ -20,10 +20,25 @@ export default function NotificationBell() {
         setCount(0);
         return;
       }
+
       setSignedIn(true);
+      const { data: membership } = await supabase
+        .from("company_memberships")
+        .select("company_id")
+        .eq("user_id", auth.user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+
+      if (!membership?.company_id) {
+        if (active) setCount(0);
+        return;
+      }
+
       const { count: unread } = await supabase
         .from("notifications")
         .select("id", { count: "exact", head: true })
+        .eq("company_id", membership.company_id)
         .eq("user_id", auth.user.id)
         .is("read_at", null);
       if (active) setCount(Number(unread || 0));
