@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
+import DeleteStatementButton from "./DeleteStatementButton";
 
-export default async function StatementsPage() {
+export default async function StatementsPage({searchParams}:{searchParams:Promise<Record<string,string|string[]|undefined>>}) {
+  const query=await searchParams;
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
   if (!authData.user) redirect("/login");
@@ -21,20 +23,22 @@ export default async function StatementsPage() {
             <Link href="/" className="back-link">← Dashboard</Link>
             <Link href="/projects" className="secondary-link">Projects</Link>
           </div>
-          <Link href="/statements/upload" className="md-button">Upload Statement</Link>
+          <Link href="/add" className="md-button">+ Add records</Link>
         </div>
 
         <header className="page-heading compact">
           <p className="page-eyebrow green">Banking</p>
           <h1>Statement History</h1>
-          <p>Monthly imports are compared against prior uploads before anything is counted again.</p>
+          <p>Imports are compared against prior uploads before anything is counted again. You can also remove a wrong import; the audit trail keeps the deletion record.</p>
         </header>
+        {query.deleted==="1"&&<div className="notice notice-green" style={{marginBottom:12}}><b>Statement deleted.</b> The import was removed and the deletion remains in the audit trail.</div>}
 
         <section style={{ display: "grid", gap: 10 }}>
           {(imports ?? []).length === 0 && (
             <article className="compact-card">
               <h2 style={{ marginTop: 0 }}>No statements uploaded yet</h2>
-              <p style={{ color: "#718195", marginBottom: 0 }}>Upload the first bank statement and the system will establish the account and comparison baseline.</p>
+              <p style={{ color: "#718195", marginBottom: 8 }}>Start from the records you already have. Upload a bank statement, tell Charismak what to search for, and use the signals to create or link projects.</p>
+              <Link href="/add" className="primary-link-button">Upload your first record</Link>
             </article>
           )}
 
@@ -53,16 +57,14 @@ export default async function StatementsPage() {
                 </div>
                 <div className="statement-history-kpis">
                   {[['Rows', item.rows_total], ['Auto-posted', posted], ['Needs action', pending], ['Already known', item.rows_already_known]].map(([label,value]) => (
-                    <div key={String(label)}>
-                      <small>{label}</small>
-                      <b>{Number(value || 0).toLocaleString()}</b>
-                    </div>
+                    <div key={String(label)}><small>{label}</small><b>{Number(value || 0).toLocaleString()}</b></div>
                   ))}
                 </div>
                 {(item.detected_as_new_account || item.overlapping_import_id) && <p style={{ margin: "9px 0 0", fontSize: 10, color: "#8a6616" }}>{item.detected_as_new_account ? "New financial account detected. " : ""}{item.overlapping_import_id ? "This statement overlaps a previous import." : ""}</p>}
-                <div className="statement-history-actions">
+                <div className="statement-history-actions" style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                   <Link href={`/statements/${item.id}`}>Open review</Link>
                   {pending > 0 && <Link href={`/statements/${item.id}/bulk`}>Bulk review</Link>}
+                  <DeleteStatementButton importId={item.id} compact />
                 </div>
               </article>
             );
