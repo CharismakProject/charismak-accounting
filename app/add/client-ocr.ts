@@ -1,5 +1,7 @@
 "use client";
 
+import { readFileArrayBuffer } from "./file-read";
+
 type Progress=(message:string)=>void;
 let tesseractLoading:Promise<any>|null=null;
 let pdfLoading:Promise<any>|null=null;
@@ -43,7 +45,7 @@ export async function readVisualDocument(file:File,progress:Progress=()=>{}):Pro
     }
     if(ext!=="pdf")throw new Error("On-device OCR is used for photos and scanned PDFs only.");
     const pdf=await pdfjs();
-    const bytes=new Uint8Array(await file.arrayBuffer());
+    const bytes=new Uint8Array(await readFileArrayBuffer(file));
     const pdfDoc=await pdf.getDocument({data:bytes}).promise;
     const pageTexts:string[]=[];const confidences:number[]=[];
     for(let i=1;i<=pdfDoc.numPages;i++){
