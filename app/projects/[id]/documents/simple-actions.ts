@@ -24,13 +24,19 @@ function interpretation(intel:any,hasRelated:boolean){
   let effect="reference_only";
   if(kind==="boq"||kind==="quotation"){commercialRole="base_scope";effect="contract_baseline"}
   if(kind==="variation"){
-    commercialRole=hasRelated?"variation":"additional_scope";
-    billingRole=/invoice/.test(text)?"client_invoice":"none";
+    const clearlyChangesEarlierScope=hasRelated||/variation boq|\bdifference\b|prev(?:ious)?\s+(?:qty|amount)|new\s+(?:qty|amount)|revised\s+(?:scope|qty|amount)|change to|change in/.test(text);
+    commercialRole=clearlyChangesEarlierScope?"variation":"additional_scope";
+    billingRole=/\binvoice\b/.test(text)?"client_invoice":"none";
     effect="variation";
   }
   if(kind==="invoice"){
     billingRole="client_invoice";effect="client_invoice";
     if(/additional|new scope|extra work|revised scope|variation/.test(text))commercialRole=hasRelated?"variation":"additional_scope";
+  }
+  if(kind==="purchase_order"){
+    commercialRole="none";
+    billingRole="none";
+    effect="reference_only";
   }
   if(kind==="fund_retirement"){effect="funding_reconciliation_evidence";commercialRole="none"}
   if(kind==="fund_request"){effect="funding_request_evidence";commercialRole="none"}
@@ -58,7 +64,7 @@ export async function acceptDocumentInterpretation(formData:FormData){
     effect:meaning.effect,amount,
     document_nature:meaning.documentNature,commercial_role:meaning.commercialRole,billing_role:meaning.billingRole,
     approval_status:approvalStatus,confidence:intel.confidence,auto_interpreted:true,user_overridden:false,
-    applied_data:{reference:intel.document_reference,related_reference:intel.related_reference,detected_subtype:intel.detected_subtype},
+    applied_data:{reference:intel.document_reference,related_reference:intel.related_reference,detected_subtype:intel.detected_subtype,extracted_fields:intel.extracted_fields},
     applied_by:user.id,applied_at:new Date().toISOString()
   },{onConflict:"document_id"});
   if(applyError)throw new Error(applyError.message);
@@ -72,7 +78,8 @@ export async function acceptDocumentInterpretation(formData:FormData){
     if(existing)await supabase.from("project_variations").update({title:intel.title||"Project variation",amount,description:intel.related_reference||null,updated_by:user.id,updated_at:new Date().toISOString()}).eq("id",existing.id);
     else await supabase.from("project_variations").insert({project_id:projectId,variation_code:code,title:intel.title||"Project variation",description:intel.related_reference||null,variation_type:"addition",amount,status:"proposed",created_by:user.id,updated_by:user.id});
   }
-  await supabase.from("project_document_intelligence").update({review_status:"confirmed",reviewed_by:user.id,reviewed_at:new Date().toISOString(),confirmed_effect:meaning.effect,confirmed_amount:amount,confirmation_notes:"Accepted suggested construction interpretation",updated_at:new Date().toISOString()}).eq("document_id",documentId).eq("project_id",projectId);
+  const note=meaning.documentNature==="purchase_order"?"Accepted as purchase-order evidence only; it does not increase the project value automatically, preventing double counting against invoices or variations.":"Accepted suggested construction interpretation";
+  await supabase.from("project_document_intelligence").update({review_status:"confirmed",reviewed_by:user.id,reviewed_at:new Date().toISOString(),confirmed_effect:meaning.effect,confirmed_amount:amount,confirmation_notes:note,updated_at:new Date().toISOString()}).eq("document_id",documentId).eq("project_id",projectId);
   await supabase.rpc("refresh_project_commercial_position",{p_project_id:projectId});
   revalidatePath(`/projects/${projectId}`);revalidatePath(`/projects/${projectId}/documents`);revalidatePath("/projects");revalidatePath("/");
   redirect(`/projects/${projectId}/documents?accepted=${encodeURIComponent(documentId)}`);
