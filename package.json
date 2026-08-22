@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "qa:web": "npm test && tsc --noEmit",
+    "build": "npm run qa:web && next build",
     "start": "next start",
     "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
