@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { webcrypto } from "node:crypto";
 import { optionalFileHash, readFileArrayBuffer } from "../app/add/file-read.ts";
 import { needsOcrFallback } from "../app/add/client-ocr.ts";
+
+if (!globalThis.crypto) Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: true });
 
 function namedBlob(bytes, name, type = "application/octet-stream") {
   const blob = new Blob([bytes], { type });
