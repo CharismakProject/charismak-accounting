@@ -2,7 +2,7 @@ name: Build Validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   pull_request:
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
           cache-dependency-path: package.json
       - name: Install web dependencies
         run: npm ci --no-audit --no-fund
-      - name: Accounting regression tests
+      - name: Accounting and document-intelligence regression tests
         run: npm test
       - name: Web type check
         run: npx tsc --noEmit

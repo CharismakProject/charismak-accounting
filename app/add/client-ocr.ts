@@ -62,4 +62,6 @@ export async function readVisualDocument(file:File,progress:Progress=()=>{}):Pro
   } finally { await worker.terminate().catch(()=>{}); }
 }
 
-export function needsOcrFallback(message:string|undefined){return /selectable text|scanned|image[- ]only|no transaction table|could not be recognised|could not.*read.*pdf/i.test(String(message||""));}
+// A PDF that reaches generic project confirmation can still be a scan with no
+// selectable text. Retry it through OCR once before asking the user to classify it.
+export function needsOcrFallback(message:string|undefined){return /selectable text|scanned|image[- ]only|no transaction table|could not be recognised|could not.*read.*pdf|project confirmation needed/i.test(String(message||""));}
