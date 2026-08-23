@@ -103,6 +103,17 @@ export default function UniversalIntakeV6({companyId,projects,onboarding=false,d
     return ocrAnalyse(i,file,documentId,batchId);
   }
 
+  async function analyseFile(i:number,file:File,documentId:string,batchId:string){
+    const route=releaseUploadRoute(extensionOf(file.name));
+    if(route==="image")return ocrAnalyse(i,file,documentId,batchId);
+    if(route==="pdf")return pdfAnalyse(i,file,documentId,batchId);
+    update(i,{message:route==="excel"?"Reading the Excel workbook…":"Reading the Word document…"});
+    const normal=await supabase.functions.invoke("analyse-intake-document-v3",{body:{documentId,batchId,documentTypeHint:"auto",action:"analyse",keywords:[]}});
+    const msg=normal.data?.error||normal.data?.message||(normal.error?await readableFunctionError(normal.error):"");
+    if(normal.error||normal.data?.error)throw new Error(normal.data?.error||msg);
+    return normal.data;
+  }
+
   async function removeResult(i:number){
     const r=results[i];if(!r?.documentId||r.state==="removed")return;
     if(!window.confirm("Delete this uploaded record? The audit trail will still show the deletion."))return;
@@ -122,7 +133,7 @@ export default function UniversalIntakeV6({companyId,projects,onboarding=false,d
       for(const f of files){if(!isReleaseUploadSupported(f.name))throw new Error(`${f.name}: this release accepts Excel, Word, PDF, JPG and JPEG files.`);if(f.size>MAX)throw new Error(`${f.name}: file is over the 20 MB limit.`);}
     }catch(e:any){setSummary(e?.message||"The selected files could not be accepted.");return;}
     setBusy(true);setResults(files.map(f=>({name:f.name,state:"queued",message:"Waiting…"})));
-    let done=0,review=0,duplicate=0,failed=0;
+    let done=0,review=0,duplicate=0,retried=0,failed=0;
     try{
       const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error("Your session expired. Sign in again.");
       const {data:batch,error:be}=await supabase.from("intake_batches").insert({company_id:companyId,created_by:user.id,total_files:files.length}).select("id").single();if(be||!batch)throw new Error(be?.message||"Could not start this upload.");
@@ -133,21 +144,24 @@ export default function UniversalIntakeV6({companyId,projects,onboarding=false,d
           update(i,{state:"working",message:"Uploading the original file securely…"});await storeOriginal(path,file);
           update(i,{message:"Checking for an exact duplicate on the server…"});const guard=await duplicateGuard(path);
           if(guard.duplicate&&guard.existing){
-            await supabase.storage.from("universal-intake").remove([path]);duplicate++;const existing=guard.existing;
+            await supabase.storage.from("universal-intake").remove([path]);const existing=guard.existing;
+            const prior=await supabase.from("intake_items").select("id,batch_id,status").eq("document_id",existing.id).maybeSingle();
+            if(!prior.error&&prior.data&&["failed","needs_review"].includes(String(prior.data.status))){
+              documentId=existing.id;intakeItemId=String(prior.data.id);retried++;
+              update(i,{state:"working",message:"This file is already stored, but its earlier analysis was unfinished. Retrying the existing record safely…",documentId,intakeItemId});
+              await supabase.from("intake_items").update({status:"processing",message:"Retrying analysis of the existing stored document."}).eq("id",intakeItemId);
+              const analysed=await analyseFile(i,file,documentId,String(prior.data.batch_id));
+              await applyResult(i,documentId,intakeItemId,analysed);if(analysed?.status==="needs_review")review++;else done++;
+              continue;
+            }
+            duplicate++;
             update(i,{state:"duplicate",message:`This exact document is already stored${existing.file_name?` as ${existing.file_name}`:""}. It was not counted again.`,documentId:existing.id,href:existing.project_id?`/projects/${existing.project_id}/documents`:existing.document_type==="bank_statement"?"/statements":"/documents"});continue;
           }
           const doc=await supabase.from("source_documents").insert({company_id:companyId,project_id:projectId||null,document_type:"other",file_name:file.name,storage_path:path,file_hash:guard.fileHash,metadata:{bucket:"universal-intake",extension:ext,mime_type:file.type||null,original_size:file.size,intake_project_hint:projectId||null,intake_document_type_hint:"auto",intake_action:"analyse",server_duplicate_checked:true},uploaded_by:user.id}).select("id").single();
           if(doc.error||!doc.data){await supabase.storage.from("universal-intake").remove([path]);throw new Error(doc.error?.message||"Could not register the uploaded file.");}
           documentId=String(doc.data.id);
           const item=await supabase.from("intake_items").insert({batch_id:batch.id,company_id:companyId,document_id:documentId,detected_project_id:projectId||null}).select("id").single();if(item.error||!item.data)throw new Error(item.error?.message||"Could not prepare the file for analysis.");intakeItemId=String(item.data.id);
-          const route=releaseUploadRoute(ext);let analysed:any=null;
-          if(route==="image")analysed=await ocrAnalyse(i,file,documentId,batch.id);
-          else if(route==="pdf")analysed=await pdfAnalyse(i,file,documentId,batch.id);
-          else{
-            update(i,{message:route==="excel"?"Reading the Excel workbook…":"Reading the Word document…"});
-            const normal=await supabase.functions.invoke("analyse-intake-document-v3",{body:{documentId,batchId:batch.id,documentTypeHint:"auto",action:"analyse",keywords:[]}});
-            const msg=normal.data?.error||normal.data?.message||(normal.error?await readableFunctionError(normal.error):"");if(normal.error||normal.data?.error)throw new Error(normal.data?.error||msg);analysed=normal.data;
-          }
+          const analysed=await analyseFile(i,file,documentId,batch.id);
           await applyResult(i,documentId,intakeItemId,analysed);if(analysed?.status==="needs_review")review++;else done++;
         }catch(e:any){
           const msg=e?.message||"This file could not be processed.";
@@ -155,8 +169,8 @@ export default function UniversalIntakeV6({companyId,projects,onboarding=false,d
           else{failed++;if(storagePath)await supabase.storage.from("universal-intake").remove([storagePath]).catch(()=>undefined);update(i,{state:"failed",message:msg,documentId});}
         }
       }
-      await supabase.from("intake_batches").update({processed_files:done+review+duplicate,needs_review_count:review,status:failed===files.length?"failed":review?"needs_review":"completed",summary:{processed:done,needs_review:review,duplicates:duplicate,failed}}).eq("id",batch.id);
-      setSummary(`${done} organised automatically · ${review} need a decision · ${duplicate} duplicate${duplicate===1?"":"s"} blocked · ${failed} failed.`);router.refresh();
+      await supabase.from("intake_batches").update({processed_files:done+review+duplicate,needs_review_count:review,status:failed===files.length?"failed":review?"needs_review":"completed",summary:{processed:done,needs_review:review,duplicates:duplicate,retried_existing:retried,failed}}).eq("id",batch.id);
+      setSummary(`${done} organised automatically · ${review} need a decision · ${duplicate} duplicate${duplicate===1?"":"s"} blocked${retried?` · ${retried} unfinished record${retried===1?"":"s"} retried`:""} · ${failed} failed.`);router.refresh();
     }catch(e:any){setSummary(e?.message||"The upload could not start.");}finally{setBusy(false);}
   }
 
