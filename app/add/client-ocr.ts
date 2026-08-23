@@ -64,7 +64,7 @@ export async function readPdfTextDocument(file:File,progress:Progress=()=>{}):Pr
   const bytes=new Uint8Array(await readFileArrayBuffer(file));
   const pdfDoc=await pdf.getDocument({data:bytes}).promise;
   const pages:string[]=[];
-  const MAX_TEXT=650_000;
+  const MAX_TEXT=4_000_000;
   let total=0;
   let truncated=false;
   try{
