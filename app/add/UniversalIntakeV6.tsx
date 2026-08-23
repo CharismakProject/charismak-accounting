@@ -55,20 +55,31 @@ export default function UniversalIntakeV6({companyId,projects,onboarding=false,d
   }
 
   async function signals(importIds:string[]){
-    let candidates=0,autoPosted=0,pending=0;
+    let candidates=0,autoPosted=0,pending=0,intelligenceAnalysed=0,intelligencePosted=0,intelligenceReview=0;
     for(const importId of importIds){
       const discovery=await supabase.rpc("discover_statement_projects",{target_import:importId});if(!discovery.error)candidates+=Number((discovery.data as any)?.candidate_count??0);
       const post=await supabase.rpc("auto_post_statement_matches",{target_import:importId,minimum_confidence:94});
       if(!post.error){autoPosted+=Number((post.data as any)?.autoPosted??0)+Number((post.data as any)?.companyAutoPosted??0);pending+=Number((post.data as any)?.pendingReview??0);}
+      try{
+        const response=await fetch("/api/transaction-intelligence",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({importId,maxRows:24})});
+        const intelligence=await response.json().catch(()=>null);
+        if(response.ok&&intelligence?.ok){
+          intelligenceAnalysed+=Number(intelligence.analysed??0);
+          intelligencePosted+=Number(intelligence.autoPosted??0);
+          intelligenceReview+=Number(intelligence.needsReview??0);
+        }
+      }catch{}
     }
-    return{candidates,autoPosted,pending};
+    return{candidates,autoPosted,pending,intelligenceAnalysed,intelligencePosted,intelligenceReview};
   }
 
   async function applyResult(i:number,documentId:string,intakeItemId:string,analysed:any){
     const ids:string[]=Array.isArray(analysed?.statementImportIds)&&analysed.statementImportIds.length?analysed.statementImportIds.map(String):analysed?.statementImportId?[String(analysed.statementImportId)]:[];
     if(ids.length){
       const s=await signals(ids);
-      update(i,{state:analysed?.status==="needs_review"?"review":"done",type:"Financial statement",message:`${analysed?.message||"Financial statement understood."} ${s.autoPosted} high-confidence row${s.autoPosted===1?"":"s"} posted; ${s.pending} need review.${s.candidates?` ${s.candidates} possible project/site signal${s.candidates===1?"":"s"} found.`:""}`,documentId,intakeItemId,statementImportId:ids[0],href:`/statements/${ids[0]}`});
+      const totalPosted=s.autoPosted+s.intelligencePosted;const remainingReview=Math.max(0,s.pending-s.intelligencePosted);
+      const semantic=s.intelligenceAnalysed?` Transaction intelligence interpreted ${s.intelligenceAnalysed} additional row${s.intelligenceAnalysed===1?"":"s"}: ${s.intelligencePosted} safely posted and ${s.intelligenceReview} kept for review.`:"";
+      update(i,{state:analysed?.status==="needs_review"?"review":"done",type:"Financial statement",message:`${analysed?.message||"Financial statement understood."} ${totalPosted} high-confidence row${totalPosted===1?"":"s"} posted; ${remainingReview} need review.${semantic}${s.candidates?` ${s.candidates} possible project/site signal${s.candidates===1?"":"s"} found.`:""}`,documentId,intakeItemId,statementImportId:ids[0],href:`/statements/${ids[0]}`});
       return;
     }
     if(analysed?.projectId&&analysed?.status==="ready"){

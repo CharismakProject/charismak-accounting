@@ -4,6 +4,7 @@ import { createClient } from "../../../lib/supabase/server";
 import { confirmStatementTransaction } from "./actions";
 import AnalyseStatementButton from "./AnalyseStatementButton";
 import DiscoverProjectsButton from "./DiscoverProjectsButton";
+import TransactionIntelligenceButton from "./TransactionIntelligenceButton";
 
 const money=(value:number|string|null|undefined)=>value==null?"—":new Intl.NumberFormat("en-NG",{style:"currency",currency:"NGN",maximumFractionDigits:2}).format(Number(value));
 const classifications=[["project_expense","Project expense"],["project_funding","Project funding / advance"],["company_expense","Company expense / overhead"],["company_income","Company income"],["company_financing","Company financing / owner loan"],["personal_non_business","Personal / non-business"],["internal_transfer","Internal transfer"]] as const;
@@ -75,7 +76,7 @@ export default async function StatementReviewPage({params,searchParams}:{params:
     </section>
 
     {Number((statement as any).rows_total??0)>0&&<article className="review-card" style={{marginBottom:14}}>
-      <div className="review-card-head"><div><small>Project Intelligence</small><h2>{candidates.length?`${candidates.length} possible project/site signals`:`${existingProjects.length} existing project matches`}</h2></div><DiscoverProjectsButton importId={id} compact={existingProjects.length>0||candidates.length>0}/></div>
+      <div className="review-card-head"><div><small>Project Intelligence</small><h2>{candidates.length?`${candidates.length} possible project/site signals`:`${existingProjects.length} existing project matches`}</h2></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><DiscoverProjectsButton importId={id} compact={existingProjects.length>0||candidates.length>0}/><TransactionIntelligenceButton importId={id}/></div></div>
       <p style={{margin:"0 0 11px",color:"#65778b",fontSize:11,lineHeight:1.5}}>Project intelligence applies to every financial statement. Charismak searches narrations, references, counterparties and any keywords you supplied. Internal transfers and non-project movements remain accounting classifications; account names do not disable project discovery.</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(135px,1fr))",gap:8,marginBottom:11}}>
         <div className="mini-card"><small>Existing projects detected</small><b>{existingProjects.length}</b></div>
