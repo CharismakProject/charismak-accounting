@@ -7,6 +7,7 @@ const read = (path) => readFileSync(new URL(path, root), "utf8");
 const migration = read("supabase/migrations/20260823080000_manual_accounting_v1.sql");
 const manualForm = read("app/add/manual/ManualTransactionForm.tsx");
 const manualAction = read("app/add/manual/actions.ts");
+const manualPage = read("app/add/manual/page.tsx");
 const addPage = read("app/add/page.tsx");
 const approvalAction = read("app/approvals/actions.ts");
 const treasuryAction = read("app/treasury/actions.ts");
@@ -60,4 +61,5 @@ test("manual-first UI covers essential non-statement entries", () => {
   assert.match(addPage, /\/add\/manual/);
   assert.match(manualAction, /post_manual_transaction_atomic/);
   assert.match(treasuryAction, /post_manual_transfer_atomic/);
+  assert.match(manualPage, /canonical_transactions!manual_accounting_entries_canonical_transaction_id_fkey/);
 });

@@ -19,7 +19,7 @@ export default async function ManualEntryPage({ searchParams }: { searchParams: 
   const [{ data: projects }, { data: accounts }, { data: recent }] = await Promise.all([
     supabase.from("projects").select("id,project_code,name").eq("company_id", membership.company_id).neq("status", "archived").order("name"),
     supabase.from("financial_accounts").select("id,institution_name,account_name,current_balance").eq("company_id", membership.company_id).eq("is_active", true).order("institution_name"),
-    supabase.from("manual_accounting_entries").select("id,entry_type,approval_request_id,related_transaction_id,created_at,transaction:canonical_transactions(id,transaction_date,narration,signed_amount,classification,project_id,reversed_at,reversal_of,financial_account_id,category_name)").eq("company_id", membership.company_id).order("created_at", { ascending: false }).limit(20),
+    supabase.from("manual_accounting_entries").select("id,entry_type,approval_request_id,related_transaction_id,created_at,transaction:canonical_transactions!manual_accounting_entries_canonical_transaction_id_fkey(id,transaction_date,narration,signed_amount,classification,project_id,reversed_at,reversal_of,financial_account_id,category_name)").eq("company_id", membership.company_id).order("created_at", { ascending: false }).limit(20),
   ]);
   const projectIds = (projects || []).map((project: any) => project.id);
   const { data: existingCategories } = projectIds.length
