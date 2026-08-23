@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 import { validateUploadBatch } from "../../lib/accounting/guards";
 import { extensionOf, isReleaseUploadSupported, releaseUploadRoute } from "../../lib/intake/release-rules";
-import { readVisualDocument, needsOcrFallback } from "./client-ocr";
+import { readPdfTextDocument, readVisualDocument } from "./client-ocr";
 import { readFileArrayBuffer } from "./file-read";
 
 type Project={id:string;project_code:string;name:string};
@@ -16,25 +16,159 @@ const MAX=20*1024*1024;
 const safe=(s:string)=>s.replace(/[^a-zA-Z0-9._-]/g,"_");
 const label=(s:string)=>s.replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
 
-async function readableFunctionError(error:any){try{const response=error?.context as Response|undefined;if(response){if(response.status===401)return "Your session expired. Sign in again and retry.";const p=await response.clone().json().catch(()=>null);if(p?.error)return p.error;if(p?.message)return p.message;}}catch{}return error?.message||"This file could not be analysed.";}
+async function readableFunctionError(error:any){
+  try{
+    const response=error?.context as Response|undefined;
+    if(response){
+      if(response.status===401)return "Your session expired. Sign in again and retry.";
+      const p=await response.clone().json().catch(()=>null);
+      if(p?.error)return p.error;if(p?.message)return p.message;
+    }
+  }catch{}
+  return error?.message||"This file could not be analysed.";
+}
 
-export default function UniversalIntakeV6({companyId,projects,onboarding=false,defaultProjectId=""}:{companyId:string;projects:Project[];onboarding?:boolean;defaultProjectId?:string}){
- const supabase=useMemo(()=>createClient(),[]);const router=useRouter();const [projectId,setProjectId]=useState(defaultProjectId);const [results,setResults]=useState<Result[]>([]);const [summary,setSummary]=useState("");const [busy,setBusy]=useState(false);
- const update=(i:number,p:Partial<Result>)=>setResults(prev=>prev.map((r,x)=>x===i?{...r,...p}:r));
- async function storeOriginal(path:string,file:File){let stored=await supabase.storage.from("universal-intake").upload(path,file,{contentType:file.type||undefined,upsert:false});if(!stored.error)return;const first=stored.error.message||"The file could not be uploaded.";if(/permission|unauthor|row.level|bucket|too large|payload|limit/i.test(first))throw new Error(`Upload failed: ${first}`);try{const bytes=await readFileArrayBuffer(file);const blob=new Blob([bytes],{type:file.type||"application/octet-stream"});await supabase.storage.from("universal-intake").remove([path]).catch(()=>undefined);stored=await supabase.storage.from("universal-intake").upload(path,blob,{contentType:file.type||"application/octet-stream",upsert:true});if(!stored.error)return;}catch{}throw new Error(`Upload failed: ${stored.error?.message||first}`);}
- async function duplicateGuard(path:string){const r=await supabase.functions.invoke("check-intake-duplicate",{body:{companyId,bucket:"universal-intake",storagePath:path}});if(r.error||r.data?.error)throw new Error(`Duplicate safety check could not complete. Nothing was added. ${r.data?.error||await readableFunctionError(r.error)}`);if(!r.data?.fileHash)throw new Error("Duplicate safety check could not complete. Nothing was added.");return r.data as {fileHash:string;duplicate:boolean;existing?:{id:string;project_id?:string|null;document_type?:string|null;file_name?:string|null}};}
- async function signals(importIds:string[]){let candidates=0,autoPosted=0,pending=0;for(const importId of importIds){const discovery=await supabase.rpc("discover_statement_projects",{target_import:importId});if(!discovery.error)candidates+=Number((discovery.data as any)?.candidate_count??0);const post=await supabase.rpc("auto_post_statement_matches",{target_import:importId,minimum_confidence:94});if(!post.error){autoPosted+=Number((post.data as any)?.autoPosted??0)+Number((post.data as any)?.companyAutoPosted??0);pending+=Number((post.data as any)?.pendingReview??0);}}return{candidates,autoPosted,pending};}
- async function applyResult(i:number,documentId:string,intakeItemId:string,analysed:any){const ids:string[]=Array.isArray(analysed?.statementImportIds)&&analysed.statementImportIds.length?analysed.statementImportIds.map(String):analysed?.statementImportId?[String(analysed.statementImportId)]:[];if(ids.length){const s=await signals(ids);update(i,{state:analysed?.status==="needs_review"?"review":"done",type:"Financial statement",message:`${analysed?.message||"Financial statement understood."} ${s.autoPosted} high-confidence row${s.autoPosted===1?"":"s"} posted; ${s.pending} need review.${s.candidates?` ${s.candidates} possible project/site signal${s.candidates===1?"":"s"} found.`:""}`,documentId,intakeItemId,statementImportId:ids[0],href:`/statements/${ids[0]}`});return;}
-   if(analysed?.projectId&&analysed?.status==="ready"){const applied=await supabase.functions.invoke("auto-apply-project-document",{body:{documentId,projectId:analysed.projectId}});if(!applied.error&&applied.data?.applied){update(i,{state:"done",type:label(analysed?.type||"document"),message:"Document understood and the matched project was updated safely.",documentId,intakeItemId,href:`/projects/${analysed.projectId}/documents`});return;}}
-   const review=analysed?.status==="needs_review";update(i,{state:review?"review":"done",type:label(String(analysed?.type||"document")),message:analysed?.message||(review?"I understood part of this record, but a decision is needed before accounting changes.":"Record understood and organised."),documentId,intakeItemId,href:review?`/review/${intakeItemId}`:(analysed?.projectId?`/projects/${analysed.projectId}/documents`:"/documents")});}
- async function ocrAnalyse(i:number,file:File,documentId:string,batchId:string,intakeItemId:string){update(i,{state:"working",message:"Reading the photo or scan…"});const ocr=await readVisualDocument(file,m=>update(i,{message:m}));if(!ocr.text.trim())throw new Error("I could not read enough text from this scan. Try a clearer photo or higher-resolution scan.");const res=await supabase.functions.invoke("analyse-ocr-document",{body:{documentId,batchId,ocrText:ocr.text,ocrConfidence:ocr.confidence,documentTypeHint:"auto",keywords:[],projectId}});if(res.error||res.data?.error)throw new Error(res.data?.error||await readableFunctionError(res.error));return res.data;}
- async function removeResult(i:number){const r=results[i];if(!r?.documentId||r.state==="removed")return;if(!window.confirm("Delete this uploaded record? The audit trail will still show the deletion."))return;try{let data:any=null;if(r.statementImportId){const x=await supabase.rpc("delete_statement_import_with_audit",{target_import:r.statementImportId});if(x.error)throw x.error;data=x.data;}else{const x=await supabase.rpc("delete_source_document_with_audit",{target_document:r.documentId});if(x.error)throw x.error;data=x.data;}if(data?.storage_path&&!data?.virtual_sheet)await supabase.storage.from(data.bucket||"universal-intake").remove([data.storage_path]);update(i,{state:"removed",message:"Deleted from active records; deletion remains in the audit trail.",href:undefined});router.refresh();}catch(e:any){update(i,{message:e?.message||"Could not delete this record."});}}
- async function processFiles(files:File[]){if(!files.length||busy)return;setSummary("");try{validateUploadBatch(files.length,files.reduce((n,f)=>n+f.size,0));for(const f of files){if(!isReleaseUploadSupported(f.name))throw new Error(`${f.name}: this release accepts Excel, Word, PDF, JPG and JPEG files.`);if(f.size>MAX)throw new Error(`${f.name}: file is over the 20 MB limit.`);}}catch(e:any){setSummary(e?.message||"The selected files could not be accepted.");return;}
-  setBusy(true);setResults(files.map(f=>({name:f.name,state:"queued",message:"Waiting…"})));let done=0,review=0,duplicate=0,failed=0;try{const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error("Your session expired. Sign in again.");const {data:batch,error:be}=await supabase.from("intake_batches").insert({company_id:companyId,created_by:user.id,total_files:files.length}).select("id").single();if(be||!batch)throw new Error(be?.message||"Could not start this upload.");
-   for(let i=0;i<files.length;i++){const file=files[i];const ext=extensionOf(file.name);let documentId:string|undefined,intakeItemId:string|undefined,storagePath:string|undefined;try{const path=`${companyId}/intake/${new Date().getUTCFullYear()}/${Date.now()}-${crypto.randomUUID().slice(0,8)}-${safe(file.name)}`;storagePath=path;update(i,{state:"working",message:"Uploading the original file securely…"});await storeOriginal(path,file);update(i,{message:"Checking for an exact duplicate on the server…"});const guard=await duplicateGuard(path);if(guard.duplicate&&guard.existing){await supabase.storage.from("universal-intake").remove([path]);duplicate++;const existing=guard.existing;update(i,{state:"duplicate",message:`This exact document is already stored${existing.file_name?` as ${existing.file_name}`:""}. It was not counted again.`,documentId:existing.id,href:existing.project_id?`/projects/${existing.project_id}/documents`:existing.document_type==="bank_statement"?"/statements":"/documents"});continue;}
-    const doc=await supabase.from("source_documents").insert({company_id:companyId,project_id:projectId||null,document_type:"other",file_name:file.name,storage_path:path,file_hash:guard.fileHash,metadata:{bucket:"universal-intake",extension:ext,mime_type:file.type||null,original_size:file.size,intake_project_hint:projectId||null,intake_document_type_hint:"auto",intake_action:"analyse",server_duplicate_checked:true},uploaded_by:user.id}).select("id").single();if(doc.error||!doc.data){await supabase.storage.from("universal-intake").remove([path]);throw new Error(doc.error?.message||"Could not register the uploaded file.");}documentId=String(doc.data.id);const item=await supabase.from("intake_items").insert({batch_id:batch.id,company_id:companyId,document_id:documentId,detected_project_id:projectId||null}).select("id").single();if(item.error||!item.data)throw new Error(item.error?.message||"Could not prepare the file for analysis.");intakeItemId=String(item.data.id);
-    let analysed:any=null;const route=releaseUploadRoute(ext);if(route==="image")analysed=await ocrAnalyse(i,file,documentId,batch.id,intakeItemId);else{update(i,{message:route==="excel"?"Reading the Excel workbook…":route==="word"?"Reading the Word document…":"Reading the PDF…"});const normal=await supabase.functions.invoke("analyse-intake-document-v3",{body:{documentId,batchId:batch.id,documentTypeHint:"auto",action:"analyse",keywords:[]}});const msg=normal.data?.error||normal.data?.message||(normal.error?await readableFunctionError(normal.error):"");if(route==="pdf"&&(normal.error||normal.data?.status==="needs_review")&&needsOcrFallback(msg))analysed=await ocrAnalyse(i,file,documentId,batch.id,intakeItemId);else{if(normal.error||normal.data?.error)throw new Error(normal.data?.error||msg);analysed=normal.data;}}
-    await applyResult(i,documentId,intakeItemId,analysed);if(analysed?.status==="needs_review")review++;else done++;}catch(e:any){const msg=e?.message||"This file could not be processed.";if(intakeItemId){await supabase.from("intake_items").update({status:"needs_review",message:`The original file is safe. ${msg}`}).eq("id",intakeItemId);review++;update(i,{state:"review",message:`The original file is safe. ${msg}`,documentId,intakeItemId,href:`/review/${intakeItemId}`});}else{failed++;if(storagePath)await supabase.storage.from("universal-intake").remove([storagePath]).catch(()=>undefined);update(i,{state:"failed",message:msg,documentId});}}}
-   await supabase.from("intake_batches").update({processed_files:done+review+duplicate,needs_review_count:review,status:failed===files.length?"failed":review?"needs_review":"completed",summary:{processed:done,needs_review:review,duplicates:duplicate,failed}}).eq("id",batch.id);setSummary(`${done} organised automatically · ${review} need a decision · ${duplicate} duplicate${duplicate===1?"":"s"} blocked · ${failed} failed.`);router.refresh();}catch(e:any){setSummary(e?.message||"The upload could not start.");}finally{setBusy(false);}}
- return <div className="universal-add"><section className="add-hero"><span>{onboarding?"START WITH WHAT YOU ALREADY HAVE":"SMART RECORD INTAKE"}</span><h1>Upload it. Charismak understands it.</h1><p>Choose an Excel file, Word document, PDF, JPEG photo or scanned PDF. Charismak checks duplicates first, reads the record, connects what it can to your project and asks only when something is uncertain.</p></section><section className="add-card"><div style={{padding:12,borderRadius:12,background:"#f2f8fb",fontSize:11,lineHeight:1.55,color:"#456276",marginBottom:12}}><b style={{color:"#153c57"}}>Duplicate protection is automatic.</b> Every uploaded file is hashed again on the server before analysis. If the same document already exists, it is not counted again.</div><div className="add-hint-row" style={{marginBottom:12}}><label><span>Which project? <small>Optional</small></span><select value={projectId} disabled={busy} onChange={e=>setProjectId(e.target.value)}><option value="">Let Charismak identify it</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label></div><label className="add-drop"><input type="file" multiple disabled={busy} accept=".xlsx,.xls,.docx,.pdf,.jpg,.jpeg,image/jpeg" onChange={e=>{const input=e.currentTarget;const files=Array.from(input.files||[]);input.value="";void processFiles(files);}}/><strong>{busy?"Uploading and understanding your records…":"Choose documents or take a JPEG photo"}</strong><span>{busy?"Keep this page open while processing completes.":"Excel · Word · PDF · JPG/JPEG · scanned PDF · 20 MB each"}</span></label>{summary&&<div className="info-strip" style={{marginTop:12}}><b>What happened</b><span>{summary}</span></div>}</section>{!!results.length&&<section className="intake-results"><div className="intake-summary"><h2>What Charismak did</h2><p>{summary||"Processing…"}</p></div>{results.map((r,i)=><article key={`${r.name}-${i}`} className={`intake-result ${r.state}`}><div className="intake-icon">{r.state==="done"?"✓":r.state==="review"?"?":r.state==="duplicate"?"↺":r.state==="failed"?"!":r.state==="removed"?"×":"…"}</div><div className="intake-copy"><strong>{r.name}</strong>{r.type&&<div className="intake-tags"><span>{r.type}</span></div>}<p>{r.message}</p></div><div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{r.href&&r.state!=="removed"&&<Link href={r.href} className="intake-open">{r.state==="review"?"Review decision →":"Open →"}</Link>}{r.documentId&&!["working","queued","removed","duplicate"].includes(r.state)&&<button type="button" className="secondary-button" onClick={()=>removeResult(i)}>Delete</button>}</div></article>)}</section>}</div>;
+export default function UniversalIntakeV6({companyId,projects,onboarding=false,defaultProjectId="",embedded=false}:{companyId:string;projects:Project[];onboarding?:boolean;defaultProjectId?:string;embedded?:boolean}){
+  const supabase=useMemo(()=>createClient(),[]);const router=useRouter();
+  const [projectId,setProjectId]=useState(defaultProjectId);const [results,setResults]=useState<Result[]>([]);const [summary,setSummary]=useState("");const [busy,setBusy]=useState(false);
+  const update=(i:number,p:Partial<Result>)=>setResults(prev=>prev.map((r,x)=>x===i?{...r,...p}:r));
+
+  async function storeOriginal(path:string,file:File){
+    let stored=await supabase.storage.from("universal-intake").upload(path,file,{contentType:file.type||undefined,upsert:false});
+    if(!stored.error)return;
+    const first=stored.error.message||"The file could not be uploaded.";
+    if(/permission|unauthor|row.level|bucket|too large|payload|limit/i.test(first))throw new Error(`Upload failed: ${first}`);
+    try{
+      const bytes=await readFileArrayBuffer(file);const blob=new Blob([bytes],{type:file.type||"application/octet-stream"});
+      await supabase.storage.from("universal-intake").remove([path]).catch(()=>undefined);
+      stored=await supabase.storage.from("universal-intake").upload(path,blob,{contentType:file.type||"application/octet-stream",upsert:true});
+      if(!stored.error)return;
+    }catch{}
+    throw new Error(`Upload failed: ${stored.error?.message||first}`);
+  }
+
+  async function duplicateGuard(path:string){
+    const r=await supabase.functions.invoke("check-intake-duplicate",{body:{companyId,bucket:"universal-intake",storagePath:path}});
+    if(r.error||r.data?.error)throw new Error(`Duplicate safety check could not complete. Nothing was added. ${r.data?.error||await readableFunctionError(r.error)}`);
+    if(!r.data?.fileHash)throw new Error("Duplicate safety check could not complete. Nothing was added.");
+    return r.data as {fileHash:string;duplicate:boolean;existing?:{id:string;project_id?:string|null;document_type?:string|null;file_name?:string|null}};
+  }
+
+  async function signals(importIds:string[]){
+    let candidates=0,autoPosted=0,pending=0;
+    for(const importId of importIds){
+      const discovery=await supabase.rpc("discover_statement_projects",{target_import:importId});if(!discovery.error)candidates+=Number((discovery.data as any)?.candidate_count??0);
+      const post=await supabase.rpc("auto_post_statement_matches",{target_import:importId,minimum_confidence:94});
+      if(!post.error){autoPosted+=Number((post.data as any)?.autoPosted??0)+Number((post.data as any)?.companyAutoPosted??0);pending+=Number((post.data as any)?.pendingReview??0);}
+    }
+    return{candidates,autoPosted,pending};
+  }
+
+  async function applyResult(i:number,documentId:string,intakeItemId:string,analysed:any){
+    const ids:string[]=Array.isArray(analysed?.statementImportIds)&&analysed.statementImportIds.length?analysed.statementImportIds.map(String):analysed?.statementImportId?[String(analysed.statementImportId)]:[];
+    if(ids.length){
+      const s=await signals(ids);
+      update(i,{state:analysed?.status==="needs_review"?"review":"done",type:"Financial statement",message:`${analysed?.message||"Financial statement understood."} ${s.autoPosted} high-confidence row${s.autoPosted===1?"":"s"} posted; ${s.pending} need review.${s.candidates?` ${s.candidates} possible project/site signal${s.candidates===1?"":"s"} found.`:""}`,documentId,intakeItemId,statementImportId:ids[0],href:`/statements/${ids[0]}`});
+      return;
+    }
+    if(analysed?.projectId&&analysed?.status==="ready"){
+      const applied=await supabase.functions.invoke("auto-apply-project-document",{body:{documentId,projectId:analysed.projectId}});
+      if(!applied.error&&applied.data?.applied){update(i,{state:"done",type:label(analysed?.type||"document"),message:"Document understood and the matched project was updated safely.",documentId,intakeItemId,href:`/projects/${analysed.projectId}/documents`});return;}
+    }
+    const review=analysed?.status==="needs_review";
+    update(i,{state:review?"review":"done",type:label(String(analysed?.type||"document")),message:analysed?.message||(review?"I understood part of this record, but a decision is needed before accounting changes.":"Record understood and organised."),documentId,intakeItemId,href:review?`/review/${intakeItemId}`:(analysed?.projectId?`/projects/${analysed.projectId}/documents`:"/documents")});
+  }
+
+  async function analyseExtractedText(documentId:string,batchId:string,text:string,engine:string,confidence:number){
+    const res=await supabase.functions.invoke("analyse-extracted-document",{body:{documentId,batchId,extractedText:text,extractionEngine:engine,extractionConfidence:confidence}});
+    if(res.error||res.data?.error)throw new Error(res.data?.error||await readableFunctionError(res.error));
+    return res.data;
+  }
+
+  async function ocrAnalyse(i:number,file:File,documentId:string,batchId:string){
+    update(i,{state:"working",message:"Reading the photo or scanned PDF on this device…"});
+    const ocr=await readVisualDocument(file,m=>update(i,{message:m}));
+    if(!ocr.text.trim())throw new Error("I could not read enough text from this scan. Try a clearer photo or higher-resolution scan.");
+    return analyseExtractedText(documentId,batchId,ocr.text,"browser_ocr_v2",ocr.confidence);
+  }
+
+  async function pdfAnalyse(i:number,file:File,documentId:string,batchId:string){
+    update(i,{state:"working",message:"Reading the PDF page-by-page without loading it into server memory…"});
+    const extracted=await readPdfTextDocument(file,m=>update(i,{message:m}));
+    if(extracted.text.trim().length>=80){
+      const confidence=extracted.truncated?96:99;
+      return analyseExtractedText(documentId,batchId,extracted.text,"browser_pdf_text_v1",confidence);
+    }
+    update(i,{message:"This PDF is image-based. Switching to scan recognition…"});
+    return ocrAnalyse(i,file,documentId,batchId);
+  }
+
+  async function removeResult(i:number){
+    const r=results[i];if(!r?.documentId||r.state==="removed")return;
+    if(!window.confirm("Delete this uploaded record? The audit trail will still show the deletion."))return;
+    try{
+      let data:any=null;
+      if(r.statementImportId){const x=await supabase.rpc("delete_statement_import_with_audit",{target_import:r.statementImportId});if(x.error)throw x.error;data=x.data;}
+      else{const x=await supabase.rpc("delete_source_document_with_audit",{target_document:r.documentId});if(x.error)throw x.error;data=x.data;}
+      if(data?.storage_path&&!data?.virtual_sheet)await supabase.storage.from(data.bucket||"universal-intake").remove([data.storage_path]);
+      update(i,{state:"removed",message:"Deleted from active records; deletion remains in the audit trail.",href:undefined});router.refresh();
+    }catch(e:any){update(i,{message:e?.message||"Could not delete this record."});}
+  }
+
+  async function processFiles(files:File[]){
+    if(!files.length||busy)return;setSummary("");
+    try{
+      validateUploadBatch(files.length,files.reduce((n,f)=>n+f.size,0));
+      for(const f of files){if(!isReleaseUploadSupported(f.name))throw new Error(`${f.name}: this release accepts Excel, Word, PDF, JPG and JPEG files.`);if(f.size>MAX)throw new Error(`${f.name}: file is over the 20 MB limit.`);}
+    }catch(e:any){setSummary(e?.message||"The selected files could not be accepted.");return;}
+    setBusy(true);setResults(files.map(f=>({name:f.name,state:"queued",message:"Waiting…"})));
+    let done=0,review=0,duplicate=0,failed=0;
+    try{
+      const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error("Your session expired. Sign in again.");
+      const {data:batch,error:be}=await supabase.from("intake_batches").insert({company_id:companyId,created_by:user.id,total_files:files.length}).select("id").single();if(be||!batch)throw new Error(be?.message||"Could not start this upload.");
+      for(let i=0;i<files.length;i++){
+        const file=files[i];const ext=extensionOf(file.name);let documentId:string|undefined,intakeItemId:string|undefined,storagePath:string|undefined;
+        try{
+          const path=`${companyId}/intake/${new Date().getUTCFullYear()}/${Date.now()}-${crypto.randomUUID().slice(0,8)}-${safe(file.name)}`;storagePath=path;
+          update(i,{state:"working",message:"Uploading the original file securely…"});await storeOriginal(path,file);
+          update(i,{message:"Checking for an exact duplicate on the server…"});const guard=await duplicateGuard(path);
+          if(guard.duplicate&&guard.existing){
+            await supabase.storage.from("universal-intake").remove([path]);duplicate++;const existing=guard.existing;
+            update(i,{state:"duplicate",message:`This exact document is already stored${existing.file_name?` as ${existing.file_name}`:""}. It was not counted again.`,documentId:existing.id,href:existing.project_id?`/projects/${existing.project_id}/documents`:existing.document_type==="bank_statement"?"/statements":"/documents"});continue;
+          }
+          const doc=await supabase.from("source_documents").insert({company_id:companyId,project_id:projectId||null,document_type:"other",file_name:file.name,storage_path:path,file_hash:guard.fileHash,metadata:{bucket:"universal-intake",extension:ext,mime_type:file.type||null,original_size:file.size,intake_project_hint:projectId||null,intake_document_type_hint:"auto",intake_action:"analyse",server_duplicate_checked:true},uploaded_by:user.id}).select("id").single();
+          if(doc.error||!doc.data){await supabase.storage.from("universal-intake").remove([path]);throw new Error(doc.error?.message||"Could not register the uploaded file.");}
+          documentId=String(doc.data.id);
+          const item=await supabase.from("intake_items").insert({batch_id:batch.id,company_id:companyId,document_id:documentId,detected_project_id:projectId||null}).select("id").single();if(item.error||!item.data)throw new Error(item.error?.message||"Could not prepare the file for analysis.");intakeItemId=String(item.data.id);
+          const route=releaseUploadRoute(ext);let analysed:any=null;
+          if(route==="image")analysed=await ocrAnalyse(i,file,documentId,batch.id);
+          else if(route==="pdf")analysed=await pdfAnalyse(i,file,documentId,batch.id);
+          else{
+            update(i,{message:route==="excel"?"Reading the Excel workbook…":"Reading the Word document…"});
+            const normal=await supabase.functions.invoke("analyse-intake-document-v3",{body:{documentId,batchId:batch.id,documentTypeHint:"auto",action:"analyse",keywords:[]}});
+            const msg=normal.data?.error||normal.data?.message||(normal.error?await readableFunctionError(normal.error):"");if(normal.error||normal.data?.error)throw new Error(normal.data?.error||msg);analysed=normal.data;
+          }
+          await applyResult(i,documentId,intakeItemId,analysed);if(analysed?.status==="needs_review")review++;else done++;
+        }catch(e:any){
+          const msg=e?.message||"This file could not be processed.";
+          if(intakeItemId){await supabase.from("intake_items").update({status:"needs_review",message:`The original file is safe. ${msg}`}).eq("id",intakeItemId);review++;update(i,{state:"review",message:`The original file is safe. ${msg}`,documentId,intakeItemId,href:`/review/${intakeItemId}`});}
+          else{failed++;if(storagePath)await supabase.storage.from("universal-intake").remove([storagePath]).catch(()=>undefined);update(i,{state:"failed",message:msg,documentId});}
+        }
+      }
+      await supabase.from("intake_batches").update({processed_files:done+review+duplicate,needs_review_count:review,status:failed===files.length?"failed":review?"needs_review":"completed",summary:{processed:done,needs_review:review,duplicates:duplicate,failed}}).eq("id",batch.id);
+      setSummary(`${done} organised automatically · ${review} need a decision · ${duplicate} duplicate${duplicate===1?"":"s"} blocked · ${failed} failed.`);router.refresh();
+    }catch(e:any){setSummary(e?.message||"The upload could not start.");}finally{setBusy(false);}
+  }
+
+  return <div className={`universal-add${embedded?" embedded-intake":""}`}>
+    {!embedded&&<section className="add-hero"><span>{onboarding?"START WITH WHAT YOU ALREADY HAVE":"SMART RECORD INTAKE"}</span><h1>Upload it. Charismak understands it.</h1><p>Choose an Excel file, Word document, PDF, JPEG photo or scanned PDF. Charismak checks duplicates first, reads the record, connects what it can to your project and asks only when something is uncertain.</p></section>}
+    <section className="add-card">
+      <div style={{padding:12,borderRadius:12,background:"#f2f8fb",fontSize:11,lineHeight:1.55,color:"#456276",marginBottom:12}}><b style={{color:"#153c57"}}>Duplicate protection is automatic.</b> Every uploaded file is hashed on the server before analysis. PDFs are read page-by-page so large files do not depend on a memory-heavy server PDF parser.</div>
+      {!embedded&&<div className="add-hint-row" style={{marginBottom:12}}><label><span>Which project? <small>Optional</small></span><select value={projectId} disabled={busy} onChange={e=>setProjectId(e.target.value)}><option value="">Let Charismak identify it</option>{projects.map(p=><option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label></div>}
+      {embedded&&<div className="info-strip" style={{marginBottom:12}}><b>Project context is already selected.</b><span>Charismak still identifies the document itself. A bank statement remains a bank statement; it is not turned into a project commercial document.</span></div>}
+      <label className="add-drop"><input type="file" multiple disabled={busy} accept=".xlsx,.xls,.docx,.pdf,.jpg,.jpeg,image/jpeg" onChange={e=>{const input=e.currentTarget;const files=Array.from(input.files||[]);input.value="";void processFiles(files);}}/><strong>{busy?"Uploading and understanding your records…":"Choose documents or take a JPEG photo"}</strong><span>{busy?"Keep this page open while processing completes.":"Excel · Word · PDF · JPG/JPEG · scanned PDF · 20 MB each"}</span></label>
+      {summary&&<div className="info-strip" style={{marginTop:12}}><b>What happened</b><span>{summary}</span></div>}
+    </section>
+    {!!results.length&&<section className="intake-results"><div className="intake-summary"><h2>What Charismak did</h2><p>{summary||"Processing…"}</p></div>{results.map((r,i)=><article key={`${r.name}-${i}`} className={`intake-result ${r.state}`}><div className="intake-icon">{r.state==="done"?"✓":r.state==="review"?"?":r.state==="duplicate"?"↺":r.state==="failed"?"!":r.state==="removed"?"×":"…"}</div><div className="intake-copy"><strong>{r.name}</strong>{r.type&&<div className="intake-tags"><span>{r.type}</span></div>}<p>{r.message}</p></div><div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{r.href&&r.state!=="removed"&&<Link href={r.href} className="intake-open">{r.state==="review"?"Review decision →":"Open →"}</Link>}{r.documentId&&!["working","queued","removed","duplicate"].includes(r.state)&&<button type="button" className="secondary-button" onClick={()=>removeResult(i)}>Delete</button>}</div></article>)}</section>}
+  </div>;
 }
