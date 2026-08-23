@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
@@ -29,23 +30,9 @@ export async function createFinancialAccount(formData: FormData) {
   if (!ACCOUNT_TYPES.has(accountType)) throw new Error("Choose a valid financial account type.");
   const opening = openingRaw === "" ? 0 : Number(openingRaw);
   if (!Number.isFinite(opening)) throw new Error("Opening balance must be a valid number.");
-
-  const { error } = await supabase.from("financial_accounts").insert({
-    company_id: membership.company_id,
-    account_type: accountType,
-    institution_name: institution,
-    institution_key: institution.toLowerCase().replace(/[^a-z0-9]+/g, "_"),
-    account_name: accountName,
-    account_number_masked: accountNumber,
-    current_balance: opening,
-    balance_as_of: openingRaw ? new Date().toISOString().slice(0,10) : null,
-    account_scope: "company",
-    created_by: user.id,
-  });
+  const { error } = await supabase.from("financial_accounts").insert({ company_id: membership.company_id, account_type: accountType, institution_name: institution, institution_key: institution.toLowerCase().replace(/[^a-z0-9]+/g, "_"), account_name: accountName, account_number_masked: accountNumber, current_balance: opening, balance_as_of: openingRaw ? new Date().toISOString().slice(0,10) : null, account_scope: "company", created_by: user.id });
   if (error) throw new Error(error.message);
-  revalidatePath("/treasury");
-  revalidatePath("/");
-  redirect("/treasury?saved=account");
+  revalidatePath("/treasury"); revalidatePath("/"); redirect("/treasury?saved=account");
 }
 
 export async function recordInternalTransfer(formData: FormData) {
@@ -54,27 +41,21 @@ export async function recordInternalTransfer(formData: FormData) {
   const fromProject = String(formData.get("from_project_id") || "") || null;
   const toProject = String(formData.get("to_project_id") || "") || null;
   const description = String(formData.get("description") || "").trim() || "Internal transfer";
-  const validated = validateInternalTransfer({
-    amount: formData.get("amount"),
-    fromAccountId: String(formData.get("from_account_id") || ""),
-    toAccountId: String(formData.get("to_account_id") || ""),
-  });
-
-  const { error } = await supabase.rpc("record_internal_transfer_atomic", {
+  const validated = validateInternalTransfer({ amount: formData.get("amount"), fromAccountId: String(formData.get("from_account_id") || ""), toAccountId: String(formData.get("to_account_id") || "") });
+  const { error } = await supabase.rpc("post_manual_transfer_atomic", {
+    request_key: String(formData.get("request_key") || randomUUID()),
     target_company: membership.company_id,
-    target_transfer_date: date,
-    target_amount: validated.amount,
-    target_from_account: validated.fromAccountId,
-    target_to_account: validated.toAccountId,
-    target_from_project: fromProject,
-    target_to_project: toProject,
-    target_description: description,
+    from_account: validated.fromAccountId,
+    to_account: validated.toAccountId,
+    from_project: fromProject,
+    to_project: toProject,
+    transfer_date: date,
+    transfer_amount: validated.amount,
+    transfer_description: description,
+    transfer_reference: String(formData.get("reference") || "").trim() || null,
   });
   if (error) throw new Error(error.message);
-
-  revalidatePath("/treasury");
-  revalidatePath("/");
-  if (fromProject) revalidatePath(`/projects/${fromProject}`);
-  if (toProject) revalidatePath(`/projects/${toProject}`);
+  revalidatePath("/treasury"); revalidatePath("/"); revalidatePath("/add/manual");
+  if (fromProject) revalidatePath(`/projects/${fromProject}`); if (toProject) revalidatePath(`/projects/${toProject}`);
   redirect("/treasury?saved=transfer");
 }

@@ -209,9 +209,10 @@ export default async function ProjectDetailPage({ params, searchParams }: { para
             <label>Internal cost budget<input name="internal_cost_budget" type="number" step="0.01" defaultValue={project.internal_cost_budget ?? ""} /></label>
             <label>Original budget<input name="original_budget" type="number" step="0.01" defaultValue={summary?.original_budget ?? 0} /></label>
             <label>Revised budget<input name="revised_budget" type="number" step="0.01" defaultValue={summary?.revised_budget ?? 0} /></label>
-            <label>Funding received<input name="funding_received" type="number" step="0.01" defaultValue={summary?.funding_received ?? 0} /></label>
-            <label>Confirmed expenditure<input name="confirmed_expenditure" type="number" step="0.01" defaultValue={summary?.confirmed_expenditure ?? 0} /></label>
-            <label>Outstanding commitments<input name="outstanding_commitments" type="number" step="0.01" defaultValue={summary?.outstanding_commitments ?? 0} /></label>
+            <label>Funding received<input name="funding_received" type="number" step="0.01" value={summary?.funding_received ?? 0} readOnly /><small>Calculated from posted records.</small></label>
+            <label>Confirmed expenditure<input name="confirmed_expenditure" type="number" step="0.01" value={summary?.confirmed_expenditure ?? 0} readOnly /><small>Calculated from posted records.</small></label>
+            <label>Outstanding commitments<input name="outstanding_commitments" type="number" step="0.01" value={summary?.outstanding_commitments ?? 0} readOnly /><small>Calculated from posted records.</small></label>
+            <p className="wide"><Link href="/add/manual">Record funding or expenditure from Manual Entry →</Link></p>
             <label>Forecast cost to complete<input name="forecast_cost_to_complete" type="number" step="0.01" defaultValue={summary?.forecast_cost_to_complete ?? 0} /></label>
             <label>Expected contract revenue<input name="expected_contract_revenue" type="number" step="0.01" defaultValue={summary?.expected_contract_revenue ?? project.contract_value ?? 0} /></label>
             <label>Work certified<input name="work_certified" type="number" step="0.01" defaultValue={summary?.work_certified ?? 0} /></label>

@@ -1,11 +1,12 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
-import { approveRequest, createApprovalRequest, partiallyApproveRequest, rejectRequest, returnRequest } from "./actions";
+import { approveRequest, createApprovalRequest, partiallyApproveRequest, recordApprovalPayment, rejectRequest, returnRequest } from "./actions";
 
 const money = (value: number | string | null | undefined) => value == null ? "—" : new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(Number(value));
 
-export default async function ApprovalsPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+export default async function ApprovalsPage({ searchParams }: { searchParams: Promise<{ saved?: string; paid?: string }> }) {
   const query = await searchParams;
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
@@ -15,10 +16,11 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Pr
   const { data: membership } = await supabase.from("company_memberships").select("id, company_id, is_owner").eq("user_id", user.id).eq("status", "active").limit(1).maybeSingle();
   if (!membership) redirect("/login");
 
-  const [{ data: projects }, { data: requests }, { data: positions }] = await Promise.all([
+  const [{ data: projects }, { data: requests }, { data: positions }, { data: accounts }] = await Promise.all([
     supabase.from("projects").select("id, project_code, name").eq("company_id", membership.company_id).neq("status", "archived").order("name"),
     supabase.from("approval_requests").select("id, project_id, requested_by, request_type, description, amount, approved_amount, paid_amount, status, urgency, evidence_required, requested_at, project:projects(project_code,name)").eq("company_id", membership.company_id).order("requested_at", { ascending: false }).limit(100),
     supabase.from("membership_positions").select("position:positions(name,interface_family), is_primary").eq("membership_id", membership.id),
+    supabase.from("financial_accounts").select("id,institution_name,account_name").eq("company_id", membership.company_id).eq("is_active", true).order("institution_name"),
   ]);
 
   const primary: any = (positions ?? []).find((row: any) => row.is_primary) ?? (positions ?? [])[0];
@@ -34,10 +36,11 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Pr
         <div className="page-toolbar"><Link href="/" className="back-link">← Dashboard</Link><Link href="/projects" className="secondary-link">Projects</Link></div>
         <header className="page-heading compact"><p className="page-eyebrow">Workflow</p><h1>Requests & Approvals</h1><p>Request money or approval separately from payment. Emergency spend can be recorded for retrospective approval instead of disappearing from the audit trail.</p></header>
         {query.saved && <div className="notice notice-green" style={{ marginBottom: 12 }}><b>Request saved.</b> It is now in the approval queue.</div>}
+        {query.paid && <div className="notice notice-green" style={{ marginBottom: 12 }}><b>Payment recorded.</b> Cash, the project and the approval have been updated together.</div>}
 
         <section className="role-kpis" style={{ marginBottom: 10 }}>
           <article className="role-kpi"><span>Pending requests</span><strong>{pending.length}</strong><small>{money(pendingValue)}</small></article>
-          <article className="role-kpi"><span>Approved / part approved</span><strong>{rows.filter((r:any)=>["approved","partially_approved"].includes(r.status)).length}</strong><small>Awaiting or partly paid</small></article>
+          <article className="role-kpi"><span>Approved / part approved</span><strong>{rows.filter((r:any)=>["approved","partially_approved","partially_paid"].includes(r.status)).length}</strong><small>Awaiting or partly paid</small></article>
           <article className="role-kpi"><span>Paid</span><strong>{rows.filter((r:any)=>r.status==="paid").length}</strong><small>Completed workflow</small></article>
           <article className="role-kpi"><span>Emergency retrospective</span><strong>{rows.filter((r:any)=>r.status==="emergency_retrospective").length}</strong><small>Must still be reviewed</small></article>
         </section>
@@ -59,6 +62,19 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Pr
                     <form action={returnRequest}><input type="hidden" name="request_id" value={row.id} /><button type="submit">Return</button></form>
                     <form action={rejectRequest}><input type="hidden" name="request_id" value={row.id} /><button type="submit" className="reject">Reject</button></form>
                   </div>}
+                  {canDecide && ["approved", "partially_approved", "partially_paid"].includes(row.status) && Number(row.approved_amount || 0) > Number(row.paid_amount || 0) && <form action={recordApprovalPayment} className="access-form-stack" style={{ marginTop: 12 }}>
+                    <input type="hidden" name="request_id" value={row.id} />
+                    <input type="hidden" name="request_key" value={randomUUID()} />
+                    <div className="approval-summary"><div><b>Record actual payment</b><small>Approved {money(row.approved_amount)} · Paid {money(row.paid_amount || 0)}</small></div><strong>{money(Number(row.approved_amount || 0) - Number(row.paid_amount || 0))} remaining</strong></div>
+                    <label>Paid from<select name="account_id" required defaultValue=""><option value="">Choose bank, wallet or cash</option>{(accounts ?? []).map((a:any)=><option key={a.id} value={a.id}>{a.institution_name} · {a.account_name}</option>)}</select></label>
+                    <label>Payment date<input name="payment_date" type="date" required defaultValue={new Date().toISOString().slice(0,10)} /></label>
+                    <label>Amount paid<input name="amount" type="number" step="0.01" min="0.01" max={Number(row.approved_amount || 0) - Number(row.paid_amount || 0)} defaultValue={Number(row.approved_amount || 0) - Number(row.paid_amount || 0)} required /></label>
+                    <label>Accounting treatment<select name="entry_kind" defaultValue={row.request_type === "imprest" || row.request_type === "material_advance" ? "project_advance" : row.project_id ? "project_expense" : "company_expense"}><option value="project_expense">Project expense</option><option value="project_advance">Project advance / imprest (not yet expensed)</option><option value="company_expense">Company expense</option></select></label>
+                    <label>Category<input name="category" placeholder="Materials, labour, transport…" /></label>
+                    <label>Paid to<input name="counterparty" placeholder="Supplier, worker or staff member" /></label>
+                    <label>Reference<input name="reference" placeholder="Receipt, transfer or voucher reference" /></label>
+                    <button type="submit">Record payment</button>
+                  </form>}
                 </section>;
               }) : <p className="empty-state">No requests yet.</p>}
             </article>

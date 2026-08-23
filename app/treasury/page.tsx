@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "../../lib/supabase/server";
@@ -87,6 +88,7 @@ export default async function TreasuryPage({ searchParams }: { searchParams: Pro
             {canManage && <article className="data-card">
               <div className="section-title"><small>Non-P&L movement</small><h2>Record Internal Transfer</h2></div>
               <form action={recordInternalTransfer} className="access-form-stack">
+                <input type="hidden" name="request_key" value={randomUUID()} />
                 <label>Date<input name="transfer_date" type="date" defaultValue={new Date().toISOString().slice(0,10)} /></label>
                 <label>Amount<input name="amount" type="number" min="0" step="0.01" required /></label>
                 <label>From account<select name="from_account_id" defaultValue=""><option value="">None / external source</option>{(accounts ?? []).map((a:any)=><option key={a.id} value={a.id}>{a.institution_name} · {a.account_name}</option>)}</select></label>
@@ -94,6 +96,7 @@ export default async function TreasuryPage({ searchParams }: { searchParams: Pro
                 <label>From project<select name="from_project_id" defaultValue=""><option value="">No project</option>{(projects ?? []).map((p:any)=><option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label>
                 <label>To project<select name="to_project_id" defaultValue=""><option value="">No project</option>{(projects ?? []).map((p:any)=><option key={p.id} value={p.id}>{p.project_code} · {p.name}</option>)}</select></label>
                 <label>Description<input name="description" placeholder="Why was the transfer made?" /></label>
+                <label>Reference<input name="reference" placeholder="Transfer reference (optional)" /></label>
                 <button type="submit">Record transfer</button>
               </form>
             </article>}
