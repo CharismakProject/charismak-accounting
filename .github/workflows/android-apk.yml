@@ -1,0 +1,57 @@
+name: Android Test APK
+
+on:
+  push:
+    branches: [native-apk-build-v1]
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Generate Android project
+        env:
+          CI: '1'
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: charismak-accounting-android-test
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
