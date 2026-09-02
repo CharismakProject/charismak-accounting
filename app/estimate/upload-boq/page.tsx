@@ -30,5 +30,7 @@ export default async function UploadBoqPage(){
   }
 
   if (!companyId) redirect("/welcome");
-  return <UploadBoqClient companyId={companyId}/>;
+  const companyResult = await supabase.from("companies").select("name").eq("id", companyId).maybeSingle();
+  const companyName = typeof companyResult.data?.name === "string" ? companyResult.data.name : "Your company";
+  return <UploadBoqClient companyId={companyId} companyName={companyName}/>;
 }
