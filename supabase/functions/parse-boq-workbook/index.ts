@@ -2,13 +2,14 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import * as XLSX from "npm:xlsx@0.18.5";
 import { parseBoqWorkbookSheets } from "../_shared/boq-workbook-parser.ts";
+import { decorateBoqWithReview } from "../_shared/boq-review.ts";
 
 const H = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Origin":"*",
+  "Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods":"POST, OPTIONS",
 };
-const out = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...H, "content-type": "application/json" } });
+const out = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { ...H, "content-type":"application/json" } });
 const supported = new Set(["xlsx", "xls", "csv"]);
 const MAX_BYTES = 12 * 1024 * 1024;
 const MAX_SHEETS = 24;
@@ -56,15 +57,17 @@ Deno.serve(async (req: Request) => {
     });
 
     const parsed = parseBoqWorkbookSheets(sheets, fileName);
+    const reviewed = decorateBoqWithReview(parsed.boq);
+    const result = { ...parsed, boq: reviewed.boq, reviewSummary: reviewed.reviewSummary };
     if (!parsed.itemCount) {
       return out({
         ok: false,
         error: "No BOQ item rows were confidently detected. Check the workbook headings or review the sheet structure.",
-        ...parsed,
+        ...result,
       }, 422);
     }
 
-    return out({ ok: true, ...parsed });
+    return out({ ok: true, ...result });
   } catch (error) {
     return out({ error: error instanceof Error ? error.message : "Could not parse this BOQ workbook." }, 500);
   }
