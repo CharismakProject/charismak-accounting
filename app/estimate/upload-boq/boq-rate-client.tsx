@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SectionedBoq } from "../../../lib/estimate/sectioned-boq";
+import type { WorkingRateMap } from "../../../lib/estimate/estimate-summary";
 import { priceBoqLine, reviewBoqRate } from "../../../lib/estimate/rate-engine";
 
 type Draft = { value: string; source: "imported" | "manual" };
@@ -14,12 +15,12 @@ const number=(value:string)=>{
   return Number.isFinite(parsed)&&parsed>=0?parsed:null;
 };
 
-export default function BoqRateClient({boq}:{boq:SectionedBoq}){
+export default function BoqRateClient({boq,onRatesChange}:{boq:SectionedBoq;onRatesChange?:(rates:WorkingRateMap)=>void}){
   const items=useMemo(()=>boq.sections.flatMap(section=>section.items.map(item=>({section,item}))),[boq]);
   const [drafts,setDrafts]=useState<Record<string,Draft>>(()=>Object.fromEntries(items.map(({item})=>[item.id,{value:item.rate==null?"":String(item.rate),source:item.rate==null?"manual":"imported"}])));
   const [showOnlyUnpriced,setShowOnlyUnpriced]=useState(false);
 
-  const priced=items.map(({section,item})=>{
+  const priced=useMemo(()=>items.map(({section,item})=>{
     const draft=drafts[item.id]??{value:"",source:"manual" as const};
     const selectedRate=number(draft.value);
     const review=reviewBoqRate({
@@ -30,7 +31,14 @@ export default function BoqRateClient({boq}:{boq:SectionedBoq}){
     });
     const amount=priceBoqLine(item.quantity,review);
     return {section,item,draft,review,amount};
-  });
+  }),[drafts,items]);
+
+  useEffect(()=>{
+    onRatesChange?.(Object.fromEntries(priced.map(({item,review})=>[item.id,{
+      rate:review.workingRate,
+      source:review.workingRateSource==="imported"?"imported":review.workingRateSource==="manual"?"manual":review.workingRateSource==="reference"?"reference":null,
+    }])));
+  },[onRatesChange,priced]);
 
   const unpricedCount=priced.filter(row=>row.review.workingRate===null).length;
   const directTotal=priced.reduce((sum,row)=>sum+(row.amount??0),0);
