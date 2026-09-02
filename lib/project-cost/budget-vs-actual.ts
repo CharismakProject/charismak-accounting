@@ -1,4 +1,4 @@
-import { COST_CODE_GROUPS, isValidCostCode, type CostCode } from "./cost-codes";
+import { COST_CODE_GROUPS, isValidCostCode, type CostCode } from "./cost-codes.ts";
 
 export type CostBudgetInput = {
   costCode: CostCode;
