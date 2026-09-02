@@ -1,36 +1,42 @@
-# Product Editions
+# Charismak App Product Editions
 
-## Standard
+Charismak App should use one shared construction/project core while presenting the right level of complexity to different users.
 
-Standard is the default Charismak Accounting product for small and medium construction companies. It includes the complete everyday construction-finance workflow:
+## Shared foundation
 
-- one or more active projects, with a default capacity of 25
-- MD/Owner, Accountant/CFO, Project Director and Project Manager workspaces
-- role and project access controls
-- universal document intake and confidence-based review
-- bank statement processing and reconciliation
-- original scope, additional scope, variations and client invoices
-- project funding, expenditure, commitments, imprest and treasury
-- approvals, notifications, reporting and audit history
-- web and native mobile clients on the same financial record
-- company logo, letterhead and white-label printable project reports
+Every edition should preserve the same core project identity, cost codes and financial/material traceability.
 
-Standard should remain usable without formal accounting training. Adding an enterprise capability must not change its everyday navigation or onboarding.
+Core estimate concepts include:
 
-## Custom Enterprise
+- sectioned BOQ
+- reviewed quantities
+- rate source and working rate
+- supply responsibility
+- material-recipe family
+- quantity → material drilldown
+- material total → source BOQ lines
+- explicit expected-cost baseline
 
-Custom Enterprise uses the same core accounting and project model but enables only the controls required by a specific large contractor. Candidates include:
+Core Money concepts include:
 
-- multiple subsidiaries, regions or business units
-- bespoke authority and maker-checker matrices
-- SSO and enterprise identity administration
-- ERP, payroll, procurement or other API integrations
-- consolidated group reporting
-- high-volume data retention and support arrangements
-- custom security, audit and compliance requirements
+- actual transactions
+- commitments
+- funds received/financing
+- budget vs actual
+- profitability
 
-These capabilities are configuration-driven. They are not a second accounting engine and must not fork project financial truth.
+## Beginner / homeowner experience
 
-## Product rule
+Keep questions conversational and outputs simple. Users should not need to understand BOQ coding to get a useful estimate or material list.
 
-Build enterprise-ready foundations where it is economical, but do not expose enterprise complexity in Standard. Large-company work is sold, configured and validated as a custom deployment until real customer data proves which features should become general product capabilities.
+## Contractor experience
+
+Support detailed BOQs, rates, materials, procurement-ready schedules, project conversion and cost control.
+
+## QS / professional experience
+
+Support direct measured quantities, imported BOQs, detailed review, section/code control, assumptions and export-ready commercial structure.
+
+## Shared safety rule
+
+AI can suggest classification and interpretation, but deterministic math must calculate quantities/rates/totals and the user must confirm material/financial effects.
