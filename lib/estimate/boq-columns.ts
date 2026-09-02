@@ -1,43 +1,18 @@
-export type BoqColumnKey = "serial" | "description" | "quantity" | "unit" | "rate" | "amount";
+import {
+  mapBoqHeaderRow,
+  matchBoqColumnHeader,
+  type BoqColumnKey,
+  type BoqColumnMap,
+} from "../../supabase/functions/_shared/boq-column-mapping.ts";
 
-export type BoqColumnMap = Partial<Record<BoqColumnKey, number>>;
-
-const ALIASES: Record<BoqColumnKey, readonly string[]> = {
-  serial: ["s/n", "sn", "s.no", "s no", "serial", "serial no", "serial number", "item no", "item number", "item"],
-  description: ["description", "item description", "work description", "description of work", "particulars"],
-  quantity: ["qty", "quantity", "quant", "measured qty", "measured quantity"],
-  unit: ["unit", "uom", "unit of measure", "unit of measurement"],
-  rate: ["rate", "unit rate", "price", "unit price"],
-  amount: ["amount", "total", "total amount", "extended amount", "value"],
-};
-
-function normalizeHeader(value: unknown): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9/]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+export type { BoqColumnKey, BoqColumnMap };
 
 export function identifyBoqColumn(value: unknown): BoqColumnKey | null {
-  const normalized = normalizeHeader(value);
-  if (!normalized) return null;
-
-  for (const [key, aliases] of Object.entries(ALIASES) as Array<[BoqColumnKey, readonly string[]]>) {
-    if (aliases.some((alias) => normalizeHeader(alias) === normalized)) return key;
-  }
-  return null;
+  return matchBoqColumnHeader(value);
 }
 
 export function detectBoqColumns(row: readonly unknown[]): BoqColumnMap {
-  const map: BoqColumnMap = {};
-  row.forEach((cell, index) => {
-    const key = identifyBoqColumn(cell);
-    if (key && map[key] === undefined) map[key] = index;
-  });
-  return map;
+  return mapBoqHeaderRow([...row]);
 }
 
 export function boqHeaderScore(row: readonly unknown[]): number {
