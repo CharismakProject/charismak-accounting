@@ -1,0 +1,17 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { buildProjectCreationPreview, serializeProjectCreationPreview } from "../lib/estimate/project-creation-preview.ts";
+
+const boq={id:"b1",name:"House",currency:"NGN",sections:[{id:"s1",title:"Blockwork",items:[{id:"i1",itemNo:"4.1",description:"Block wall",unit:"m2",quantity:100,rate:10000,amount:1000000,materialBreakdown:{status:"needs_review",materials:[]}}]}]};
+const summary={currency:"NGN",directCost:1000000,contingency:50000,overhead:105000,profit:231000,discount:0,subtotalBeforeTax:1386000,tax:103950,grandTotal:1489950,unpricedItems:0,isCommercialTotalComplete:true,settings:{contingencyPercent:5,overheadPercent:10,profitPercent:20,discountPercent:0,taxPercent:7.5},lines:[{sectionId:"s1",sectionTitle:"Blockwork",itemId:"i1",itemNo:"4.1",description:"Block wall",quantity:100,unit:"m2",workingRate:10000,workingRateSource:"imported",amount:1000000}],sections:[],materials:[]};
+const decisions={i1:{costCode:"04",recipeFamily:"blockwork_225",supplyResponsibility:"contractor",confirmed:true}};
+
+test("requires explicit project financial mapping choices",()=>{const preview=buildProjectCreationPreview({boq,summary,decisions,choice:{projectName:"House",internalBudgetBasis:null,contractValueBasis:null}});assert.equal(preview.readyToStage,false);assert.match(preview.issues.join(" "),/internal project cost budget/);assert.match(preview.issues.join(" "),/contract value/);});
+
+test("keeps client price separate from direct cost and can include reviewed contingency in budget",()=>{const preview=buildProjectCreationPreview({boq,summary,decisions,choice:{projectName:"House",internalBudgetBasis:"direct_plus_contingency",contractValueBasis:"grand_total"}});assert.equal(preview.project.internalCostBudget,1050000);assert.equal(preview.project.contractValue,1489950);assert.equal(preview.budgetAllowances[0].kind,"contingency");assert.equal(preview.forecastProfit,439950);assert.equal(preview.readyToStage,true);});
+
+test("explicit reserve above direct cost is visible and below-direct budget is blocked",()=>{const withReserve=buildProjectCreationPreview({boq,summary,decisions,choice:{projectName:"House",internalBudgetBasis:"explicit",explicitInternalBudget:1100000,contractValueBasis:"none"}});assert.equal(withReserve.budgetAllowances[0].kind,"other");assert.equal(withReserve.budgetAllowances[0].amount,100000);assert.equal(withReserve.readyToStage,true);const below=buildProjectCreationPreview({boq,summary,decisions,choice:{projectName:"House",internalBudgetBasis:"explicit",explicitInternalBudget:900000,contractValueBasis:"none"}});assert.equal(below.readyToStage,false);assert.match(below.issues.join(" "),/cannot be below/);});
+
+test("unpriced or unconfirmed BOQ cannot stage",()=>{const preview=buildProjectCreationPreview({boq,summary:{...summary,unpricedItems:1},decisions:{i1:{...decisions.i1,confirmed:false}},choice:{projectName:"House",internalBudgetBasis:"direct_cost",contractValueBasis:"none"}});assert.equal(preview.readyToStage,false);assert.ok(preview.issues.length>=2);});
+
+test("serialized staging snapshot is versioned and non-persistent",()=>{const preview=buildProjectCreationPreview({boq,summary,decisions,choice:{projectName:"House",internalBudgetBasis:"direct_cost",contractValueBasis:"subtotal_before_tax"}});const json=serializeProjectCreationPreview(preview);assert.match(json,/"schemaVersion": 1/);assert.match(json,/charismak_app_estimate/);assert.match(json,/"reviewed": true/);});
