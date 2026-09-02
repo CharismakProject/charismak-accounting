@@ -1,6 +1,40 @@
 export type MaterialBreakdownStatus = "available" | "needs_review" | "not_applicable";
 export type MaterialBreakdownSource = "recipe" | "manual" | "imported";
 
+export type BoqReviewConfidence = "high" | "medium" | "low";
+export type BoqSupplyResponsibility = "contractor" | "client" | "specialist" | "labour_only" | "unknown";
+export type BoqRecipeFamily =
+  | "blockwork_225"
+  | "blockwork_150"
+  | "blockwork"
+  | "concrete"
+  | "reinforcement"
+  | "formwork"
+  | "plastering"
+  | "screeding"
+  | "floor_tiling"
+  | "wall_tiling"
+  | "painting"
+  | "roofing"
+  | "ceiling"
+  | "plumbing_installation"
+  | "electrical_installation"
+  | "direct_supply"
+  | "external_works"
+  | "not_applicable"
+  | "needs_review";
+
+export type BoqReviewSuggestion = {
+  costCode: string | null;
+  costCodeName: string | null;
+  recipeFamily: BoqRecipeFamily;
+  recipeLabel: string;
+  supplyResponsibility: BoqSupplyResponsibility;
+  confidence: BoqReviewConfidence;
+  requiresAttention: boolean;
+  reasons: string[];
+};
+
 export type BoqMaterialComponent = {
   id: string;
   material: string;
@@ -28,6 +62,7 @@ export type SectionedBoqItem = {
   rate?: number | null;
   amount?: number | null;
   materialBreakdown: BoqMaterialBreakdown;
+  reviewSuggestion?: BoqReviewSuggestion;
 };
 
 export type SectionedBoqSection = {
