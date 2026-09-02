@@ -19,9 +19,26 @@ This repository is the working codebase for the **Charismak App**. It is not the
 4. **Money** — funds, transactions, commitments, approvals, budget-vs-actual and profitability.
 5. **More** — Market, Ask Charismak, people/access, branding, audit and settings while those areas mature into first-class modules.
 
+## Sectioned BOQ rule
+
+BOQs remain sectioned rather than being flattened into one long list.
+
+`Section → Item → Quantity → Material Breakdown`
+
+The Quantity is interactive. Selecting it shows the reviewed material recipe, base material quantities, waste allowance, final quantities and assumptions for that exact BOQ item. Material summaries preserve the reverse trace back to the contributing section/item quantities.
+
+This lets a user inspect both directions:
+
+- BOQ quantity → materials generated from that quantity; and
+- total material → BOQ items that contributed to the total.
+
+AI may suggest a section or material recipe, but deterministic rules calculate the quantities after review.
+
 ## Release intake
 
 The accounting/document-intelligence foundation supports Excel (XLSX/XLS), Word (DOCX), PDF including scanned PDF OCR fallback, and JPG/JPEG images. Exact document duplicates are checked using a server-side SHA-256 hash before analysis, and statement transaction fingerprints include value date and running balance to reduce duplicate-posting errors.
+
+Estimate intake is being developed review-first so uploaded BOQs and drawings do not silently create accounting truth.
 
 ## Safety rule
 
