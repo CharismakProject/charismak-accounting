@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getStagedProjectWorkspace } from "../../../../lib/estimate/staged-project-storage";
 import type { StagedProjectWorkspace } from "../../../../lib/estimate/staged-project-workspace";
+import ApprovalClient from "./approval-client";
 
 const money=(value:number|null,currency:string)=>value==null?"—":new Intl.NumberFormat("en-NG",{style:"currency",currency,maximumFractionDigits:0}).format(value);
 const qty=(n:number)=>n.toLocaleString("en-NG",{maximumFractionDigits:3});
@@ -20,6 +21,8 @@ export default function DraftProjectWorkspacePage(){
     <header style={{background:"#082945",borderRadius:18,padding:18,color:"#fff"}}><small style={{fontSize:8,fontWeight:900,letterSpacing:".12em",color:"#9ec5df"}}>PROJECT WORKSPACE</small><h1 style={{margin:"6px 0 3px",fontSize:24}}>{draft.project.name}</h1><p style={{margin:0,fontSize:10,color:"#d7e5ef"}}>Estimate → reviewed Budget Baseline → Project. Money/Accounting is not linked yet.</p><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8,marginTop:14}}><Hero label="Internal Budget" value={money(draft.project.internalCostBudget,c)}/><Hero label="Contract Value" value={money(draft.project.contractValue,c)}/><Hero label="Forecast Profit" value={money(draft.forecastProfit,c)}/><Hero label="Cost Groups" value={String(draft.costGroups.length)}/></div></header>
 
     <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:8}}><Metric label="Contractor Direct Cost" value={money(draft.internalDirectCost,c)}/><Metric label="Budget Allowances" value={money(draft.budgetBaseline.allowanceTotal,c)}/><Metric label="Client-supplied excluded" value={money(draft.clientSuppliedExcludedValue,c)}/><Metric label="Baseline reconciliation" value={money(draft.budgetBaseline.reconciliationDifference,c)}/></section>
+
+    <ApprovalClient draft={draft}/>
 
     <section className="compact-card"><small style={eye}>BUDGET BASELINE BY COST GROUP</small><h2 style={title}>Expected project cost before actual spending starts</h2>{draft.costGroups.length?draft.costGroups.map(group=><div key={group.costCode} style={row}><span><b>{group.costCode} · {group.name}</b><small style={sub}>{group.lineCount} BOQ line{group.lineCount===1?"":"s"}</small></span><strong>{money(group.amount,c)}</strong></div>):<p style={{color:"#718195"}}>No cost groups available.</p>}{draft.budgetAllowances.map(allowance=><div key={allowance.sourceAllowanceId} style={row}><span><b>Allowance · {allowance.description}</b><small style={sub}>Separate from trade cost groups</small></span><strong>{money(allowance.amount,c)}</strong></div>)}</section>
 
