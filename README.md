@@ -24,6 +24,8 @@ The current review branch implements the foundation for:
 6. Drill from a BOQ quantity to its materials
 7. Drill from a material summary total back to contributing BOQ lines
 
+The quantity/material and reverse source drilldowns are implemented on both the browser/PWA and native mobile App.
+
 Material calculations currently cover reviewed blockwork, plastering, screeding, finish-area tiling, measured reinforcement and contractor direct-supply items. Specification-dependent work such as concrete mixes, formwork systems, painting systems, roofing, ceilings and MEP remains parameter-required rather than guessed.
 
 See `docs/shared-project-core-v1.md` for the full rules and explicit calculation assumptions.
