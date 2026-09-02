@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   BoqRecipeFamily,
   BoqSupplyResponsibility,
@@ -8,6 +8,7 @@ import type {
   SectionedBoqItem,
   SectionedBoqSection,
 } from "../../../lib/estimate/sectioned-boq";
+import type { MaterializeDecision } from "../../../lib/estimate/material-recipe-engine";
 
 const COST_CODES = [
   ["01","Preliminaries"],["02","Substructure"],["03","Concrete & Reinforcement"],["04","Blockwork & Masonry"],
@@ -67,10 +68,18 @@ function isComplete(decision:Decision){
   return Boolean(decision.costCode)&&decision.recipeFamily!=="needs_review"&&decision.supplyResponsibility!=="unknown";
 }
 
-export default function BoqReviewClient({boq}:{boq:SectionedBoq}){
+export default function BoqReviewClient({boq,onDecisionsChange}:{boq:SectionedBoq;onDecisionsChange?:(decisions:Record<string,MaterializeDecision>)=>void}){
   const initial=useMemo(()=>Object.fromEntries(boq.sections.flatMap(section=>section.items.map(item=>[item.id,startingDecision(item)]))),[boq]);
   const [decisions,setDecisions]=useState<DecisionMap>(initial);
   const [open,setOpen]=useState<Record<string,boolean>>(()=>Object.fromEntries(boq.sections.map(section=>[section.id,true])));
+
+  useEffect(()=>{
+    onDecisionsChange?.(Object.fromEntries(Object.entries(decisions).map(([id,decision])=>[id,{
+      recipeFamily:decision.recipeFamily,
+      supplyResponsibility:decision.supplyResponsibility,
+      confirmed:decision.confirmed,
+    }])));
+  },[decisions,onDecisionsChange]);
 
   const total=boq.sections.reduce((n,s)=>n+s.items.length,0);
   const confirmed=Object.values(decisions).filter(d=>d.confirmed).length;
