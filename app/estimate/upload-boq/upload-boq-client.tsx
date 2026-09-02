@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createClient } from "../../../lib/supabase/client";
 import type { SectionedBoq } from "../../../lib/estimate/sectioned-boq";
-import type { MaterializeDecision } from "../../../lib/estimate/material-recipe-engine";
+import type { ReviewedBoqDecisionMap } from "../../../lib/estimate/review-decision";
 import type { WorkingRateMap } from "../../../lib/estimate/estimate-summary";
 import { initialWorkingRates } from "../../../lib/estimate/estimate-summary";
 import SectionedBoqClient from "../boq/sectioned-boq-client";
@@ -35,7 +35,7 @@ export default function UploadBoqClient({ companyId, companyName }: { companyId:
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const [result,setResult]=useState<ParseResult|null>(null);
-  const [reviewDecisions,setReviewDecisions]=useState<Record<string,MaterializeDecision>>({});
+  const [reviewDecisions,setReviewDecisions]=useState<ReviewedBoqDecisionMap>({});
   const [materializedBoq,setMaterializedBoq]=useState<SectionedBoq|null>(null);
   const [workingRates,setWorkingRates]=useState<WorkingRateMap>({});
 
@@ -65,7 +65,7 @@ export default function UploadBoqClient({ companyId, companyName }: { companyId:
       setResult(parsed);
       setMaterializedBoq(parsed.boq??null);
       if(parsed.boq)setWorkingRates(initialWorkingRates(parsed.boq));
-      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Review meaning and rates, calculate materials, then prepare the estimate summary and exports.`:"No BOQ items were detected.");
+      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Review meaning and rates, calculate materials, then prepare the estimate summary and project stage.`:"No BOQ items were detected.");
     }catch(error){
       setMessage(error instanceof Error?error.message:"Could not parse this BOQ.");
     }finally{
@@ -106,13 +106,13 @@ export default function UploadBoqClient({ companyId, companyName }: { companyId:
             {result.reviewSummary&&<><span>·</span><span><b>{result.reviewSummary.clearItems}</b> clear suggestion(s)</span><span>·</span><span><b>{result.reviewSummary.attentionItems}</b> need attention</span></>}
             {(result.skippedSheets?.length??0)>0&&<><span>·</span><span><b>{result.skippedSheets!.length}</b> non-BOQ sheet(s) skipped</span></>}
           </div>
-          <p style={{margin:0,fontSize:11,lineHeight:1.55,color:"#6b7f8e"}}>Review order: meaning → working rates → material quantities → commercial summary. None of these review screens posts to Accounting.</p>
+          <p style={{margin:0,fontSize:11,lineHeight:1.55,color:"#6b7f8e"}}>Review order: meaning → working rates → material quantities → commercial summary → project staging. None of these review screens posts to Accounting.</p>
         </section>
 
         <BoqReviewClient key={`review-${result.boq.id}`} boq={result.boq} onDecisionsChange={setReviewDecisions}/>
         <BoqRateClient key={`rates-${result.boq.id}`} boq={result.boq} onRatesChange={setWorkingRates}/>
         <BoqMaterialsClient key={`materials-${result.boq.id}`} boq={result.boq} decisions={reviewDecisions} onMaterialized={setMaterializedBoq}/>
-        <BoqEstimateSummaryClient key={`summary-${result.boq.id}`} boq={result.boq} materializedBoq={materializedBoq} workingRates={workingRates} companyName={companyName}/>
+        <BoqEstimateSummaryClient key={`summary-${result.boq.id}`} boq={result.boq} materializedBoq={materializedBoq} workingRates={workingRates} decisions={reviewDecisions} companyName={companyName}/>
 
         <section style={{marginTop:14}}>
           <div style={{fontSize:11,color:"#687d8c",marginBottom:8}}><b>Quantity drilldown:</b> click a blue quantity below after calculating reviewed materials to see the exact components, waste allowance and assumptions for that BOQ item.</div>
