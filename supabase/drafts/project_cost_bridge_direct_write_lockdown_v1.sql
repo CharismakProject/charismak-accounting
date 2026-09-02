@@ -13,15 +13,20 @@ revoke insert,update,delete,truncate,references,trigger
 revoke insert,update,delete,truncate,references,trigger
   on table public.project_cost_budget_allowances
   from authenticated;
+revoke insert,update,delete,truncate,references,trigger
+  on table public.project_cost_budget_materials
+  from authenticated;
 
--- Read access still requires the RLS policies from project_cost_bridge_v1.sql.
+-- Read access still requires the RLS policies from the project-cost bridge drafts.
 grant select on table public.project_source_links to authenticated;
 grant select on table public.project_cost_budgets to authenticated;
 grant select on table public.project_cost_budget_lines to authenticated;
 grant select on table public.project_cost_budget_allowances to authenticated;
+grant select on table public.project_cost_budget_materials to authenticated;
 
 -- Server maintenance remains possible without widening browser/client permissions.
 grant all privileges on table public.project_source_links to service_role;
 grant all privileges on table public.project_cost_budgets to service_role;
 grant all privileges on table public.project_cost_budget_lines to service_role;
 grant all privileges on table public.project_cost_budget_allowances to service_role;
+grant all privileges on table public.project_cost_budget_materials to service_role;
