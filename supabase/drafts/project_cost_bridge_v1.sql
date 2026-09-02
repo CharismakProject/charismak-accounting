@@ -175,6 +175,20 @@ alter table public.project_cost_budgets enable row level security;
 alter table public.project_cost_budget_lines enable row level security;
 alter table public.project_cost_budget_allowances enable row level security;
 
+-- Supabase no longer guarantees automatic Data API grants for newly-created public tables.
+-- Keep API exposure explicit and let RLS provide row-level authorization.
+revoke all on table public.construction_cost_codes from anon;
+revoke all on table public.project_source_links from anon;
+revoke all on table public.project_cost_budgets from anon;
+revoke all on table public.project_cost_budget_lines from anon;
+revoke all on table public.project_cost_budget_allowances from anon;
+
+grant select on table public.construction_cost_codes to authenticated,service_role;
+grant select,insert,update on table public.project_source_links to authenticated,service_role;
+grant select,insert,update on table public.project_cost_budgets to authenticated,service_role;
+grant select,insert,update,delete on table public.project_cost_budget_lines to authenticated,service_role;
+grant select,insert,update,delete on table public.project_cost_budget_allowances to authenticated,service_role;
+
 drop policy if exists construction_cost_codes_select_authenticated on public.construction_cost_codes;
 create policy construction_cost_codes_select_authenticated
 on public.construction_cost_codes for select to authenticated
@@ -274,5 +288,5 @@ with check (exists (
 ));
 
 -- Intentionally no direct mutation of existing transaction RLS or project RLS in V1.
--- Applying a cost code to transactions will use the existing authenticated posting/update path
--- once that write path is reconciled with the live database schema.
+-- Applying a cost code to transactions will use a reviewed server-side write path once
+-- the Accounting repository/live-database identity layer is reconciled.
