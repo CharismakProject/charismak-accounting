@@ -1,45 +1,37 @@
 # Charismak App
 
-Mobile-first construction operating app for estimating, BOQs, project control, construction money, procurement intelligence and AI-assisted project questions.
+Charismak App is the construction operating product for estimating, projects and money management. It is intentionally separate from the public Charismak Project website.
 
-## Product boundary
+## Product areas
 
-This repository is the working codebase for the **Charismak App**. It is not the corporate website.
+- **Home** — company/project overview and next actions
+- **Estimate** — BOQ import, review, rates, materials and estimating workflows
+- **Projects** — project workspace and progress
+- **Money** — Accounting, transactions, commitments, approvals and profitability
+- **More** — Market, Ask Charismak and supporting settings/tools
 
-- `www.charismakproject.com` remains the public company website, project portfolio, blog, services and lightweight/public estimator.
-- The Charismak App is the logged-in construction product: Estimate, Projects, Money, Market and Ask Charismak.
-- Accounting is a major module inside the App under **Money**; it remains the source of financial truth for transactions, journals, approvals, project funding and reporting.
-- Estimating/BOQ logic produces expected cost and approved budget baselines. It must never silently overwrite accounting truth.
+The repository is still physically named `charismak-accounting` during the transition, but the application identity is **Charismak App** and Accounting is the Money module.
 
-## Main app areas
+## Estimate V1 workflow in progress
 
-1. **Home** — company/project standing and next actions.
-2. **Estimate** — quick estimate, build estimate, drawing/BOQ intake, BOQ Studio and materials schedules.
-3. **Projects** — active jobs, budget, progress, documents and team.
-4. **Money** — funds, transactions, commitments, approvals, budget-vs-actual and profitability.
-5. **More** — Market, Ask Charismak, people/access, branding, audit and settings while those areas mature into first-class modules.
+The current review branch implements the foundation for:
 
-## Sectioned BOQ rule
+1. Upload XLSX/XLS/CSV BOQ
+2. Detect flexible headings and preserve sections
+3. Review cost classification, material-recipe family and supply responsibility
+4. Review imported/manual working rates
+5. Calculate deterministic materials from confirmed supported recipes
+6. Drill from a BOQ quantity to its materials
+7. Drill from a material summary total back to contributing BOQ lines
 
-BOQs remain sectioned rather than being flattened into one long list.
+Material calculations currently cover reviewed blockwork, plastering, screeding, finish-area tiling, measured reinforcement and contractor direct-supply items. Specification-dependent work such as concrete mixes, formwork systems, painting systems, roofing, ceilings and MEP remains parameter-required rather than guessed.
 
-`Section → Item → Quantity → Material Breakdown`
+See `docs/shared-project-core-v1.md` for the full rules and explicit calculation assumptions.
 
-The Quantity is interactive. Selecting it shows the reviewed material recipe, base material quantities, waste allowance, final quantities and assumptions for that exact BOQ item. Material summaries preserve the reverse trace back to the contributing section/item quantities.
+## Development safety
 
-This lets a user inspect both directions:
+The `shared-project-core-v1` branch and PR #26 are development/review work only.
 
-- BOQ quantity → materials generated from that quantity; and
-- total material → BOQ items that contributed to the total.
+No production merge, live Supabase migration, production Edge Function deployment, production Vercel deployment or production APK publication should occur without explicit authorization.
 
-AI may suggest a section or material recipe, but deterministic rules calculate the quantities after review.
-
-## Release intake
-
-The accounting/document-intelligence foundation supports Excel (XLSX/XLS), Word (DOCX), PDF including scanned PDF OCR fallback, and JPG/JPEG images. Exact document duplicates are checked using a server-side SHA-256 hash before analysis, and statement transaction fingerprints include value date and running balance to reduce duplicate-posting errors.
-
-Estimate intake is being developed review-first so uploaded BOQs and drawings do not silently create accounting truth.
-
-## Safety rule
-
-The website and App are separate product surfaces. App development must not replace or redesign the public website estimator unless a website change is explicitly requested.
+The connected Accounting database contains real records and must remain protected while repository/live-schema compatibility is reconciled incrementally.
