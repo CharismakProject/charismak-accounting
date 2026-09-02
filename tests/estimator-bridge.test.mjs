@@ -20,7 +20,15 @@ test("estimator bridge never treats AI or heuristic cost-code suggestions as con
 test("estimator bridge checks duplicate lines and arithmetic before import", () => {
   assert.match(bridge, /duplicate_source_line_id/);
   assert.match(bridge, /line_arithmetic_mismatch/);
-  assert.match(bridge, /budget_line_total_mismatch/);
+  assert.match(bridge, /budget_total_mismatch/);
+});
+
+test("contingency stays a reviewed allowance outside work-item cost codes", () => {
+  assert.match(bridge, /estimatorBridgeAllowanceSchema/);
+  assert.match(bridge, /kind:\s*z\.enum\(\["contingency", "other"\]\)/);
+  assert.match(bridge, /allowanceTotal/);
+  assert.match(bridge, /reconciledBudgetTotal/);
+  assert.match(bridge, /lines plus reviewed allowances/i);
 });
 
 test("estimator bridge preserves contract value separately from internal budget", () => {
@@ -35,4 +43,5 @@ test("estimator bridge creates deterministic SHA-256 source fingerprints", () =>
   assert.match(bridge, /crypto\.subtle\.digest\("SHA-256"/);
   assert.match(bridge, /sourceProjectId/);
   assert.match(bridge, /sourceVersion/);
+  assert.match(bridge, /allowances:\s*snapshot\.allowances\.map/);
 });
