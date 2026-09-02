@@ -56,6 +56,78 @@ More contains Market, Ask Charismak, company settings and supporting tools.
 
 **Estimate is authority for Expected Cost. Money is authority for Actual Money. Project connects them.**
 
+## Financial concepts must remain separate
+
+The following are never interchangeable:
+
+- BOQ Direct Cost;
+- contingency or reviewed project reserve;
+- internal project cost budget;
+- overhead;
+- profit;
+- discount;
+- tax/VAT;
+- client contract value;
+- actual cost;
+- unpaid commitments.
+
+The App must never silently turn a client-facing Grand Total into the internal construction-cost budget.
+
+## Current estimate review sequence
+
+1. Upload/read the BOQ.
+2. Confirm item meaning, shared cost code, recipe family and supply responsibility.
+3. Confirm or enter working rates.
+4. Calculate supported deterministic material quantities.
+5. Review commercial adjustments and the estimate summary.
+6. Export the reviewed estimate.
+7. Prepare a project staging snapshot.
+
+No stage above posts to Accounting automatically.
+
+## Estimate Summary V1
+
+Commercial calculation order is explicit:
+
+**Direct Cost → Contingency → Overhead → Profit → Discount → Tax/VAT → Grand Total**
+
+All commercial percentages default to zero. The App does not invent a VAT rate, markup, overhead or contingency percentage. Unpriced BOQ items remain visible and keep the commercial total provisional.
+
+Web/PWA exports include:
+
+- commercial summary;
+- priced BOQ using reviewed working rates;
+- material schedule using reviewed deterministic material quantities.
+
+Print/PDF preview and Excel-compatible export are review snapshots. Exporting does not create a project or post Accounting entries.
+
+## Create Project review stage
+
+Project creation is deliberately separated from estimate pricing.
+
+Before an estimate can be staged as a project, the user explicitly chooses the financial mapping.
+
+### Internal cost budget basis
+
+- Direct Cost only;
+- Direct Cost + reviewed contingency; or
+- another explicit reviewed internal budget.
+
+An explicit internal budget below reviewed Direct Cost is blocked. Any amount above Direct Cost becomes a visible reviewed reserve/allowance rather than being hidden inside a trade cost code.
+
+### Contract value basis
+
+- tax-inclusive Grand Total;
+- subtotal before tax;
+- another explicit signed/approved contract value; or
+- no contract value yet.
+
+The App does not assume whether VAT is inside or outside the signed contract sum.
+
+A staging snapshot is not ready while required BOQ lines are unpriced, item review is incomplete, or reviewed cost codes are unresolved.
+
+The current project staging output is persistence-free and versioned. It does not insert a project or budget into the live database. Live creation requires the destination schema/access bridge to be approved first.
+
 ## Repository transition
 
 The current working repository remains physically named `charismak-accounting` until a safe repository rename is performed. Application identity is already Charismak App. The repository name must not be interpreted as a product-boundary decision.
@@ -68,6 +140,7 @@ Development branches and preview features do not authorize:
 - merging to production;
 - applying live Supabase migrations;
 - deploying preview Edge Functions to production;
-- publishing a production mobile APK.
+- publishing a production mobile APK;
+- inserting staged project budgets into the live Accounting database.
 
 Those actions require explicit release authorization.
