@@ -1,179 +1,195 @@
-# Shared Project Core V1
+# Charismak App Shared Project Core V1
 
-## Goal
+## Product boundary
 
-Create one stable commercial bridge from Estimate to Construction Accounting inside **Charismak App**, while keeping the public Charismak website separate.
+Charismak App is a separate construction-software product from the public Charismak website. The public website can offer lightweight estimating/content and link into the App, but it is not the application runtime.
 
-Estimate remains responsible for expected cost: estimates, BOQ quantities, rate build-ups, materials and price snapshots.
-Money/Accounting remains responsible for actual financial truth: transactions, commitments, journals, reconciliation and financial reporting.
+The App's primary product areas are:
 
-## Canonical project rule
+- Home
+- Estimate
+- Projects
+- Money
+- More (Market, Ask Charismak, settings and supporting tools)
 
-A construction job must eventually have one canonical project UUID in the Accounting/shared core. Estimate records may retain their current source IDs during migration, but must gain a bridge reference to the canonical project rather than creating a second independent project identity.
+Accounting remains the Money engine inside the App rather than the identity of the whole product.
 
-The bridge must be idempotent: importing or linking the same estimate twice must not create a duplicate accounting project.
+## Core financial rule
 
-## Sectioned BOQ rule
+**Estimate is authority for Expected Cost. Money is authority for Actual Money. Project connects them.**
 
-A BOQ is never flattened into one undifferentiated list.
+Keep these concepts separate:
 
-Every bill keeps a hierarchy:
+- BOQ/client price
+- direct construction cost
+- contingency/reserve
+- internal approved cost budget
+- contract value/revenue
+- actual paid cost
+- unpaid commitments
+- profit/deficit
 
-`BOQ → Section → Item → Quantity → Material Breakdown`
+Profit, VAT and commercial markups must never silently become internal project cost.
 
-Examples of sections include Substructure, Concrete & Reinforcement, Blockwork & Masonry, Roofing, Finishes, Plumbing and Electrical. Imported source headings should remain sections wherever possible. Charismak may suggest a missing or cleaner section, but the user can review the classification and the original source relationship must remain traceable.
+## BOQ V1 structure
 
-The **Quantity** is an interactive project-cost object, not just display text. Selecting a quantity must expose the material breakdown for that exact BOQ item, including:
+Every imported or created bill must preserve:
 
-- material name;
-- calculated base quantity;
-- waste allowance;
-- final material quantity;
-- calculation/recipe source;
-- assumptions that materially affect the result;
-- review state when a recipe has not yet been confirmed.
+**Section → Item → Quantity → Material Breakdown**
 
-The reverse trace must also work: a material summary such as total Cement must retain the contributing BOQ section/item references so the user can see which measured quantities produced the total.
+The quantity is an interactive drilldown. When a reviewed material recipe is available, selecting a quantity shows the materials, base quantities, waste/allowances and calculation assumptions attached to that exact BOQ item.
 
-Material recipes are deterministic after review. AI may classify an item or suggest a recipe, but it must not silently invent authoritative material quantities.
+Reverse traceability is also required: a grouped material total must retain the BOQ item IDs/sections that contributed to it.
 
-## Commercial separation
+## Flexible spreadsheet import
 
-Never collapse these values into one field:
+BOQ import must not depend on one fixed heading name or order. The parser maps common variants for:
 
-- original/base contract value
-- approved variations
-- identified but unapproved commercial value
-- client invoices
-- internal cost budget
-- commitments
-- actual cost
-- cost to complete
-- forecast final cost
+- serial/item number
+- description/particulars/scope
+- quantity
+- unit/UOM
+- rate/unit price
+- amount/total/value
 
-An uploaded BOQ is review-first. Parsing and classification may happen automatically, but commercial/accounting values change only after the document direction and project relationship are confirmed.
+Priced and unpriced BOQs are both valid. Multi-sheet workbooks and section headings should be preserved. Totals/subtotals are summary rows, not construction items.
 
-### Estimate total mapping rule
+## BOQ Review Intelligence
 
-The Estimate module deliberately carries several commercial layers. They are not interchangeable Accounting values:
+Review suggestions are non-authoritative. Charismak can suggest:
 
-- `directCost` — priced work-item cost before commercial adjustments
-- `contingency` — separately identified risk allowance
-- `overhead` — separately identified overhead/commercial allowance
-- `profit` — selling margin, never project cost
-- `discount` — commercial adjustment
-- `subTotalBeforeTax` — commercial total before VAT
-- `vat` — tax, never project cost
-- `grandTotal` — commercial total including VAT
+- cost group (01–20)
+- material-recipe family
+- supply responsibility
+- confidence and reasons
 
-Therefore an Estimate never silently maps `grandTotal` to `internal_cost_budget`.
+The user confirms or corrects the meaning before it becomes authoritative.
 
-The review flow proposes two internal-cost candidates only:
+Cost classification and material-recipe classification are separate. Concrete, reinforcement and formwork share cost group 03 but use different material logic.
 
-1. direct cost; or
-2. direct cost plus contingency.
+Client-supplied, labour-only, specialist and unknown items must remain distinguishable.
 
-An authorised reviewer may also enter an explicit internal budget. Overhead remains visible and separate because Money already tracks allocated company overhead separately from direct project cost.
+## Rate Engine V1
 
-Contract value is also an explicit commercial decision: before-tax total, VAT-inclusive grand total, an explicit approved amount, or unknown. Missing contract value remains `null`; it must not create a false project loss by pretending expected revenue is zero.
+The Rate Engine carries three separate concepts:
 
-Only a **completed and fully priced** Estimate can be approved as an Accounting budget baseline.
+1. imported/user rate
+2. Charismak reference range (when reviewed observations exist)
+3. selected working rate
 
-## Cost-code contract
+Rules:
 
-`lib/project-cost/cost-codes.ts` is the first cross-product contract.
+- imported rate is the default working rate until deliberately changed;
+- an unpriced BOQ remains unpriced until a rate is deliberately selected or entered;
+- Charismak reference data can warn but cannot overwrite the user's working rate;
+- zero is a valid working rate for no-charge/client-supplied situations;
+- changing working rate recalculates line amount and working direct total;
+- reference observations retain location, date, source and confidence.
 
-Every measurable BOQ/estimate item should map to a cost code. The same code is then used by commitments, bills, transactions and budget-vs-actual reporting.
+No current market price should be hard-coded into application logic.
 
-Initial top-level groups:
+## BOQ → Materials V1
 
-01 Preliminaries
-02 Substructure
-03 Concrete & Reinforcement
-04 Blockwork & Masonry
-05 Structural Steel
-06 Roofing
-07 Doors
-08 Windows & Glazing
-09 Plastering & Screeding
-10 Floor Finishes
-11 Wall Finishes
-12 Ceilings
-13 Painting & Decoration
-14 Joinery & Fixtures
-15 Plumbing & Sanitary
-16 Electrical
-17 Mechanical & HVAC
-18 External Works
-19 Plant, Equipment & Specialist Works
-20 Professional, Statutory & Other
+Material calculations are deterministic and review-first. They require a confirmed recipe family and supply responsibility.
 
-Top-level codes are stable identifiers. More detailed child codes can be introduced without changing these parent codes.
+### Calculable in V1
 
-## Estimate bridge payload
+**Blockwork (225mm / 150mm / generic)**
+- measured in area;
+- 10 blocks/m²;
+- 5% block waste;
+- 0.0015m³ wet mortar per block;
+- 10% mortar allowance;
+- 1:6 cement:sand mortar;
+- dry-volume factor 1.33;
+- 50kg cement bag and 1440kg/m³ cement bulk-density assumption.
 
-The reviewed bridge accepts a snapshot shaped conceptually as:
+**Plastering**
+- measured in area;
+- 12mm average thickness;
+- 1:4 cement:sand mix;
+- 10% wet-mortar allowance;
+- dry-volume factor 1.33.
 
-```ts
-{
-  source: "charismak_estimator",
-  sourceProjectId: string,
-  sourceEstimateId?: string,
-  sourceVersion: number,
-  projectName: string,
-  currency: "NGN",
-  contractValue?: number,
-  internalCostBudget: number,
-  priceBasisAt?: string,
-  reviewed: true,
-  lines: Array<{
-    sourceLineId: string,
-    description: string,
-    unit?: string,
-    quantity?: number,
-    rate?: number,
-    amount: number,
-    costCode: string,
-    supplyResponsibility?: "contractor" | "client" | "unknown"
-  }>
-}
-```
+**Screeding**
+- measured in area;
+- 25mm average thickness;
+- 1:4 cement:sand mix;
+- 10% wet-mortar allowance;
+- dry-volume factor 1.33.
 
-`lib/project-cost/from-estimator-bill.ts` converts a raw Estimator Bill shape into a review candidate first. It does not create accounting truth. The reviewer explicitly confirms cost basis, contract-value basis, cost codes and supply responsibility before `reviewed: true` can be produced.
+**Floor/wall tiling**
+- finish area + 5% cutting/waste allowance;
+- adhesive and grout remain parameter-required until tile format/product is confirmed.
 
-`lib/project-cost/estimator-bridge.ts` then validates arithmetic, duplicate source line IDs, cost-code confirmation and budget totals. Suggested/heuristic cost codes are never authoritative.
+**Measured reinforcement**
+- accepts kg/tonnes;
+- converts tonnes to kg;
+- 5% steel waste;
+- binding wire at 1.5% of measured reinforcement.
 
-`lib/project-cost/accounting-project-adapter.ts` converts only a ready reviewed snapshot into a persistence-free Accounting project seed. Missing commercial revenue and forecast profit remain unknown (`null`) rather than fabricating a loss.
+**Direct-supply items**
+- only when contractor supply is confirmed;
+- BOQ quantity is used directly with no hidden conversion.
 
-The shared core stores a source fingerprint/reference so repeated imports update or version the same source relationship instead of duplicating the project.
+### Excluded from contractor material totals
 
-## Budget-vs-actual rule
+- client-supplied lines;
+- labour/installation-only lines;
+- items explicitly marked no material recipe required.
 
-For every cost code, reporting must be able to show:
+### Parameter-required in V1
 
-- approved internal budget
-- committed cost
-- paid/actual cost
-- unpaid commitment
-- cost to complete
-- forecast final cost
-- variance to budget
+Charismak must not invent materials for these without specification inputs:
 
-Cash spent alone is not the project's total exposure.
+- concrete grade/mix or ready-mix basis;
+- formwork system/reuse basis;
+- painting coats/coverage/product;
+- roofing build-up/profile/accessories;
+- ceiling system/grid/board specification;
+- plumbing and electrical assemblies/accessories;
+- generic external/specialist works.
 
-## Implementation order
+Unknown or incompatible units remain `needs_review` instead of being coerced.
 
-1. Freeze the shared cost-code and sectioned-BOQ contracts.
-2. Finish App foundation and Estimate workspace.
-3. Build Upload BOQ (Excel first) into the sectioned BOQ structure.
-4. Build BOQ review intelligence and bulk section/recipe confirmation.
-5. Add the rate engine.
-6. Expand BOQ → Materials using deterministic construction recipes.
-7. Add estimate summary and PDF/Excel export.
-8. Create Project from an approved estimate/budget baseline.
-9. Map commitments and actual transactions to compatible cost codes.
-10. Build Budget vs Actual and later Ask Charismak over the combined data.
+## Material traceability
 
-## Safety
+Material summary rows preserve source BOQ item references. Therefore:
 
-No live Estimate or Accounting business records are changed by this design work. Database migration follows only after the live Accounting schema and compatibility path have been verified. The public company website remains a separate product surface and is not replaced by this App.
+- Quantity → materials works at item level;
+- Material total → contributing BOQ lines works at summary level.
+
+This traceability must survive later persistence/export work.
+
+## Project conversion contract
+
+A reviewed estimate may later create or update a Project cost baseline, but this is a deliberate user action. The persistence bridge must remain versioned, idempotent and review-first.
+
+A source estimate/BOQ should not automatically create transactions or actual spend.
+
+## Budget vs Actual
+
+Project cost position should combine:
+
+- approved budget lines/allowances
+- actual transactions
+- unpaid commitments
+- unclassified actuals
+
+Paid commitments must not be double counted with actuals.
+
+Statuses include within budget, at risk, over budget and not budgeted.
+
+## Access and live-schema safety
+
+The connected live Accounting Supabase contains real records and is authoritative for current production compatibility.
+
+- `company_members` remains the canonical live membership model.
+- Do not introduce a duplicate membership truth merely to make newer repository screens compile.
+- Internal budget visibility must respect MD/accountant vs PM access.
+- Project-cost bridge DDL/RPC files remain drafts until the prerequisite live-schema compatibility phases are completed and explicitly approved.
+- Preview/review BOQ, rate and material features do not post to Accounting.
+
+## Deployment rule
+
+No production merge, production Vercel deployment, live Supabase migration, Edge Function deployment or production APK publication is implied by development on `shared-project-core-v1`.
