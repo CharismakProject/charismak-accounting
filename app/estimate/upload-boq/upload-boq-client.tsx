@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createClient } from "../../../lib/supabase/client";
 import type { SectionedBoq } from "../../../lib/estimate/sectioned-boq";
+import type { MaterializeDecision } from "../../../lib/estimate/material-recipe-engine";
 import SectionedBoqClient from "../boq/sectioned-boq-client";
 import BoqReviewClient from "./boq-review-client";
 import BoqRateClient from "./boq-rate-client";
+import BoqMaterialsClient from "./boq-materials-client";
 
 type Warning = { sheet: string; row?: number; message: string };
 type ParseResult = {
@@ -30,9 +32,11 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   const [result,setResult]=useState<ParseResult|null>(null);
+  const [reviewDecisions,setReviewDecisions]=useState<Record<string,MaterializeDecision>>({});
+  const [materializedBoq,setMaterializedBoq]=useState<SectionedBoq|null>(null);
 
   function choose(next: File | null){
-    setResult(null);setMessage("");setFile(next);
+    setResult(null);setMessage("");setFile(next);setReviewDecisions({});setMaterializedBoq(null);
     if(!next)return;
     const ext=(next.name.split(".").pop()||"").toLowerCase();
     if(!allowed.has(ext))setMessage("Choose an Excel BOQ (.xlsx or .xls) or CSV file.");
@@ -43,7 +47,7 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
     if(!file||busy)return;
     const ext=(file.name.split(".").pop()||"").toLowerCase();
     if(!allowed.has(ext)||file.size>MAX_BYTES)return;
-    setBusy(true);setResult(null);setMessage("Uploading a temporary copy for BOQ analysis…");
+    setBusy(true);setResult(null);setReviewDecisions({});setMaterializedBoq(null);setMessage("Uploading a temporary copy for BOQ analysis…");
     const storagePath=`${companyId}/boq-preview/${Date.now()}-${crypto.randomUUID().slice(0,8)}-${safe(file.name)}`;
     try{
       const {error:uploadError}=await supabase.storage.from("universal-intake").upload(storagePath,file,{contentType:file.type||undefined,upsert:false});
@@ -54,7 +58,8 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
       const parsed=data as ParseResult;
       if(parsed.error&&!parsed.boq)throw new Error(parsed.error);
       setResult(parsed);
-      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Confirm the meaning of the bill and working rates before materials or project budgets become authoritative.`:"No BOQ items were detected.");
+      setMaterializedBoq(parsed.boq??null);
+      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Confirm meaning and rates, then calculate materials from the reviewed quantities.`:"No BOQ items were detected.");
     }catch(error){
       setMessage(error instanceof Error?error.message:"Could not parse this BOQ.");
     }finally{
@@ -69,7 +74,7 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
       <header className="page-heading compact">
         <p className="page-eyebrow">EXCEL BOQ IMPORT</p>
         <h1>Upload the BOQ you already use</h1>
-        <p>Charismak detects common heading variations and column orders, keeps the bill sectioned, and lets you review meaning and rates before anything becomes an estimate or project budget.</p>
+        <p>Charismak detects common heading variations and column orders, keeps the bill sectioned, and lets you review meaning, rates and material quantities before anything becomes an estimate or project budget.</p>
       </header>
 
       <section className="data-card" style={{padding:18,display:"grid",gap:13}}>
@@ -98,12 +103,13 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
           <p style={{margin:0,fontSize:11,lineHeight:1.55,color:"#6b7f8e"}}>Review order: meaning first, working rates second, material quantities third. None of these review screens posts to Accounting.</p>
         </section>
 
-        <BoqReviewClient boq={result.boq}/>
-        <BoqRateClient boq={result.boq}/>
+        <BoqReviewClient key={`review-${result.boq.id}`} boq={result.boq} onDecisionsChange={setReviewDecisions}/>
+        <BoqRateClient key={`rates-${result.boq.id}`} boq={result.boq}/>
+        <BoqMaterialsClient key={`materials-${result.boq.id}`} boq={result.boq} decisions={reviewDecisions} onMaterialized={setMaterializedBoq}/>
 
         <section style={{marginTop:14}}>
-          <div style={{fontSize:11,color:"#687d8c",marginBottom:8}}><b>Quantity drilldown:</b> the original sectioned bill stays available below. Material quantities will populate after confirmed recipe families are converted into deterministic recipes.</div>
-          <SectionedBoqClient boq={result.boq}/>
+          <div style={{fontSize:11,color:"#687d8c",marginBottom:8}}><b>Quantity drilldown:</b> click a blue quantity below after calculating reviewed materials to see the exact components, waste allowance and assumptions for that BOQ item.</div>
+          <SectionedBoqClient boq={materializedBoq??result.boq}/>
         </section>
 
         {(result.warnings?.length??0)>0&&<section className="data-card" style={{marginTop:14,padding:16}}>
