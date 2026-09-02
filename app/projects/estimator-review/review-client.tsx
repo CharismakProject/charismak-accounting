@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   approveEstimatorBillCandidate,
   buildEstimatorBillReviewCandidate,
@@ -20,7 +20,12 @@ import { buildAccountingProjectSeed } from "../../../lib/project-cost/accounting
 import {
   buildStageEstimatorBudgetRpcArgs,
   type StageEstimatorBudgetRpcArgs,
+  type StageEstimatorBudgetRpcResult,
 } from "../../../lib/project-cost/persistence-contract";
+import {
+  approveReviewedProjectCostBudget,
+  stageReviewedEstimatorBudget,
+} from "./actions";
 import type { EstimatorReviewProjectOption } from "./page";
 
 type PreparedReview = {
@@ -55,6 +60,8 @@ const labelStyle = {
   fontWeight: 700,
 } as const;
 
+const responsiveGrid = "repeat(auto-fit,minmax(min(100%,220px),1fr))";
+
 export default function EstimatorBudgetReview({
   projects,
   bridgeEnabled,
@@ -78,10 +85,17 @@ export default function EstimatorBudgetReview({
   >("none");
   const [explicitContractValue, setExplicitContractValue] = useState("");
   const [prepared, setPrepared] = useState<PreparedReview | null>(null);
+  const [stagedBudget, setStagedBudget] =
+    useState<StageEstimatorBudgetRpcResult | null>(null);
+  const [approvedStatus, setApprovedStatus] = useState<
+    "approved" | "already_approved" | null
+  >(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
+  const selectedProject =
+    projects.find((project) => project.id === selectedProjectId) ?? null;
 
   const groupedSections = useMemo(() => {
     if (!candidate) return [];
@@ -104,16 +118,23 @@ export default function EstimatorBudgetReview({
 
   const unmappedCount = useMemo(
     () =>
-      candidate?.lines.filter((line) => !isValidCostCode(costCodes[line.sourceLineId] ?? ""))
-        .length ?? 0,
+      candidate?.lines.filter(
+        (line) => !isValidCostCode(costCodes[line.sourceLineId] ?? ""),
+      ).length ?? 0,
     [candidate, costCodes],
   );
+
+  const invalidatePrepared = () => {
+    setPrepared(null);
+    setStagedBudget(null);
+    setApprovedStatus(null);
+  };
 
   const readTransferFile = async (file: File | null) => {
     if (!file) return;
     setError(null);
     setMessage(null);
-    setPrepared(null);
+    invalidatePrepared();
     try {
       const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
       if (
@@ -121,7 +142,9 @@ export default function EstimatorBudgetReview({
         parsed.sourceSystem !== "charismak_estimator" ||
         parsed.reviewRequired !== true
       ) {
-        throw new Error("This is not a Charismak Estimator Accounting hand-off file.");
+        throw new Error(
+          "This is not a Charismak Estimator Accounting hand-off file.",
+        );
       }
 
       const nextCandidate = buildEstimatorBillReviewCandidate(parsed as any);
@@ -167,7 +190,7 @@ export default function EstimatorBudgetReview({
   };
 
   const setSectionCostCode = (lineIds: string[], code: string) => {
-    setPrepared(null);
+    invalidatePrepared();
     setCostCodes((current) => {
       const next = { ...current };
       for (const lineId of lineIds) next[lineId] = code;
@@ -179,12 +202,15 @@ export default function EstimatorBudgetReview({
     if (!candidate) return;
     setError(null);
     setMessage(null);
-    setPrepared(null);
+    invalidatePrepared();
 
     try {
-      if (!selectedProject) throw new Error("Choose the matching Accounting project.");
+      if (!selectedProject)
+        throw new Error("Choose the matching Accounting project.");
       if (unmappedCount > 0) {
-        throw new Error(`Review the construction cost code for ${unmappedCount} BOQ item(s).`);
+        throw new Error(
+          `Review the construction cost code for ${unmappedCount} BOQ item(s).`,
+        );
       }
 
       let internalCostBasis: EstimatorBillApprovalDecisions["internalCostBasis"];
@@ -201,7 +227,8 @@ export default function EstimatorBudgetReview({
       }
 
       let contractValueBasis: EstimatorBillApprovalDecisions["contractValueBasis"];
-      if (contractBasis === "none") contractValueBasis = { kind: "none" };
+      if (contractBasis === "none")
+        contractValueBasis = { kind: "none" };
       else if (contractBasis === "subtotal_before_tax") {
         contractValueBasis = { kind: "subtotal_before_tax" };
       } else if (contractBasis === "grand_total") {
@@ -222,7 +249,8 @@ export default function EstimatorBudgetReview({
         }
         lineDecisions[line.sourceLineId] = {
           costCode: code as CostCode,
-          supplyResponsibility: responsibility[line.sourceLineId] ?? "unknown",
+          supplyResponsibility:
+            responsibility[line.sourceLineId] ?? "unknown",
         };
       }
 
@@ -254,6 +282,51 @@ export default function EstimatorBudgetReview({
     }
   };
 
+  const stagePreparedBudget = () => {
+    if (!prepared || !bridgeEnabled || isPending) return;
+    setError(null);
+    setMessage(null);
+    startTransition(() => {
+      void (async () => {
+        const result = await stageReviewedEstimatorBudget(prepared.args);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setStagedBudget(result.data);
+        setApprovedStatus(
+          result.data.budget_status === "approved" ? "already_approved" : null,
+        );
+        setMessage(
+          result.data.status === "existing"
+            ? `Estimator source already exists as Budget Version ${result.data.budget_version}. No duplicate was created.`
+            : `Budget Version ${result.data.budget_version} staged as a draft. Review once more before approval.`,
+        );
+      })();
+    });
+  };
+
+  const approveStagedBudget = () => {
+    if (!stagedBudget || !bridgeEnabled || isPending) return;
+    setError(null);
+    setMessage(null);
+    startTransition(() => {
+      void (async () => {
+        const result = await approveReviewedProjectCostBudget(stagedBudget.budget_id);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        setApprovedStatus(result.data.status);
+        setMessage(
+          result.data.status === "already_approved"
+            ? `Budget Version ${result.data.budget_version} was already approved.`
+            : `Budget Version ${result.data.budget_version} approved as the active project-cost baseline.`,
+        );
+      })();
+    });
+  };
+
   return (
     <div style={{ display: "grid", gap: 18 }}>
       <section className="compact-card">
@@ -269,12 +342,16 @@ export default function EstimatorBudgetReview({
             <input
               type="file"
               accept="application/json,.json"
-              onChange={(event) => void readTransferFile(event.target.files?.[0] ?? null)}
+              onChange={(event) =>
+                void readTransferFile(event.target.files?.[0] ?? null)
+              }
               style={controlStyle}
             />
           </label>
           {fileName ? (
-            <span style={{ color: "#1b6b49", fontSize: 12, fontWeight: 800 }}>
+            <span
+              style={{ color: "#1b6b49", fontSize: 12, fontWeight: 800 }}
+            >
               Loaded: {fileName}
             </span>
           ) : null}
@@ -319,14 +396,15 @@ export default function EstimatorBudgetReview({
               <div>
                 <b>2. Confirm the project and budget</b>
                 <p style={{ margin: "6px 0 0", color: "#718195" }}>
-                  Estimator project: <strong>{candidate.projectName}</strong> · Version {candidate.sourceVersion}
+                  Estimator project: <strong>{candidate.projectName}</strong> ·
+                  Version {candidate.sourceVersion}
                 </p>
               </div>
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+                  gridTemplateColumns: responsiveGrid,
                   gap: 10,
                 }}
               >
@@ -345,7 +423,10 @@ export default function EstimatorBudgetReview({
                 <div className="compact-card" style={{ margin: 0 }}>
                   <small>Overhead + profit</small>
                   <b style={{ display: "block", marginTop: 5 }}>
-                    {money(candidate.totals.overhead + candidate.totals.profit, candidate.currency)}
+                    {money(
+                      candidate.totals.overhead + candidate.totals.profit,
+                      candidate.currency,
+                    )}
                   </b>
                 </div>
                 <div className="compact-card" style={{ margin: 0 }}>
@@ -361,7 +442,7 @@ export default function EstimatorBudgetReview({
                 <select
                   value={selectedProjectId}
                   onChange={(event) => {
-                    setPrepared(null);
+                    invalidatePrepared();
                     setSelectedProjectId(event.target.value);
                   }}
                   style={controlStyle}
@@ -381,7 +462,7 @@ export default function EstimatorBudgetReview({
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+                    gridTemplateColumns: responsiveGrid,
                     gap: 10,
                     padding: 12,
                     borderRadius: 14,
@@ -389,10 +470,16 @@ export default function EstimatorBudgetReview({
                   }}
                 >
                   <span style={{ fontSize: 12, color: "#607186" }}>
-                    Accounting project: <b style={{ color: "#0b2138" }}>{selectedProject.name}</b>
+                    Accounting project:{" "}
+                    <b style={{ color: "#0b2138" }}>
+                      {selectedProject.name}
+                    </b>
                   </span>
                   <span style={{ fontSize: 12, color: "#607186" }}>
-                    Existing contract value: <b style={{ color: "#0b2138" }}>{money(selectedProject.contractValue, candidate.currency)}</b>
+                    Existing contract value:{" "}
+                    <b style={{ color: "#0b2138" }}>
+                      {money(selectedProject.contractValue, candidate.currency)}
+                    </b>
                   </span>
                 </div>
               ) : null}
@@ -400,7 +487,7 @@ export default function EstimatorBudgetReview({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))",
+                  gridTemplateColumns: responsiveGrid,
                   gap: 12,
                 }}
               >
@@ -409,12 +496,14 @@ export default function EstimatorBudgetReview({
                   <select
                     value={internalBasis}
                     onChange={(event) => {
-                      setPrepared(null);
+                      invalidatePrepared();
                       setInternalBasis(event.target.value as typeof internalBasis);
                     }}
                     style={controlStyle}
                   >
-                    <option value="direct_plus_contingency">Direct cost + contingency</option>
+                    <option value="direct_plus_contingency">
+                      Direct cost + contingency
+                    </option>
                     <option value="direct_cost">Direct cost only</option>
                     <option value="explicit">Custom reviewed budget</option>
                   </select>
@@ -426,7 +515,7 @@ export default function EstimatorBudgetReview({
                       inputMode="decimal"
                       value={explicitInternalBudget}
                       onChange={(event) => {
-                        setPrepared(null);
+                        invalidatePrepared();
                         setExplicitInternalBudget(event.target.value);
                       }}
                       style={controlStyle}
@@ -440,13 +529,15 @@ export default function EstimatorBudgetReview({
                   <select
                     value={contractBasis}
                     onChange={(event) => {
-                      setPrepared(null);
+                      invalidatePrepared();
                       setContractBasis(event.target.value as typeof contractBasis);
                     }}
                     style={controlStyle}
                   >
                     <option value="none">Do not import a contract value</option>
-                    <option value="subtotal_before_tax">BOQ subtotal before VAT</option>
+                    <option value="subtotal_before_tax">
+                      BOQ subtotal before VAT
+                    </option>
                     <option value="grand_total">BOQ grand total</option>
                     <option value="explicit">Custom reviewed value</option>
                   </select>
@@ -458,7 +549,7 @@ export default function EstimatorBudgetReview({
                       inputMode="decimal"
                       value={explicitContractValue}
                       onChange={(event) => {
-                        setPrepared(null);
+                        invalidatePrepared();
                         setExplicitContractValue(event.target.value);
                       }}
                       style={controlStyle}
@@ -471,11 +562,19 @@ export default function EstimatorBudgetReview({
           </section>
 
           <section className="compact-card">
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
               <div>
                 <b>3. Confirm construction cost codes</b>
                 <p style={{ margin: "6px 0 0", color: "#718195" }}>
-                  Apply one code to a whole BOQ section, then adjust individual items only where needed.
+                  Apply one code to a whole BOQ section, then adjust individual
+                  items only where needed.
                 </p>
               </div>
               <span
@@ -489,7 +588,9 @@ export default function EstimatorBudgetReview({
                   fontWeight: 800,
                 }}
               >
-                {unmappedCount ? `${unmappedCount} item(s) still need a code` : "All items coded"}
+                {unmappedCount
+                  ? `${unmappedCount} item(s) still need a code`
+                  : "All items coded"}
               </span>
             </div>
 
@@ -507,7 +608,7 @@ export default function EstimatorBudgetReview({
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "minmax(0,1fr) minmax(180px,260px)",
+                      gridTemplateColumns: responsiveGrid,
                       gap: 12,
                       alignItems: "center",
                       padding: 14,
@@ -516,7 +617,13 @@ export default function EstimatorBudgetReview({
                   >
                     <div>
                       <b>{section.title}</b>
-                      <small style={{ display: "block", marginTop: 3, color: "#718195" }}>
+                      <small
+                        style={{
+                          display: "block",
+                          marginTop: 3,
+                          color: "#718195",
+                        }}
+                      >
                         {section.lines.length} BOQ item(s)
                       </small>
                     </div>
@@ -547,7 +654,7 @@ export default function EstimatorBudgetReview({
                         key={line.sourceLineId}
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "minmax(0,1.4fr) minmax(180px,.7fr) minmax(145px,.55fr)",
+                          gridTemplateColumns: responsiveGrid,
                           gap: 10,
                           alignItems: "center",
                           padding: 12,
@@ -556,14 +663,21 @@ export default function EstimatorBudgetReview({
                       >
                         <div style={{ minWidth: 0 }}>
                           <b style={{ fontSize: 13 }}>{line.description}</b>
-                          <small style={{ display: "block", marginTop: 3, color: "#718195" }}>
-                            {line.quantity ?? "—"} {line.unit ?? ""} · {money(line.amount, candidate.currency)}
+                          <small
+                            style={{
+                              display: "block",
+                              marginTop: 3,
+                              color: "#718195",
+                            }}
+                          >
+                            {line.quantity ?? "—"} {line.unit ?? ""} ·{" "}
+                            {money(line.amount, candidate.currency)}
                           </small>
                         </div>
                         <select
                           value={costCodes[line.sourceLineId] ?? ""}
                           onChange={(event) => {
-                            setPrepared(null);
+                            invalidatePrepared();
                             setCostCodes((current) => ({
                               ...current,
                               [line.sourceLineId]: event.target.value,
@@ -582,10 +696,11 @@ export default function EstimatorBudgetReview({
                         <select
                           value={responsibility[line.sourceLineId] ?? "unknown"}
                           onChange={(event) => {
-                            setPrepared(null);
+                            invalidatePrepared();
                             setResponsibility((current) => ({
                               ...current,
-                              [line.sourceLineId]: event.target.value as SupplyResponsibility,
+                              [line.sourceLineId]: event.target
+                                .value as SupplyResponsibility,
                             }));
                           }}
                           style={controlStyle}
@@ -604,14 +719,27 @@ export default function EstimatorBudgetReview({
           </section>
 
           <section className="compact-card">
-            <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+              }}
+            >
               <div>
                 <b>4. Validate the Accounting budget</b>
                 <p style={{ margin: "6px 0 0", color: "#718195" }}>
-                  Validation checks project identity, source version, line totals, allowances and every cost code.
+                  Validation checks project identity, source version, line
+                  totals, allowances and every cost code.
                 </p>
               </div>
-              <button type="button" onClick={() => void validateReview()} className="md-button">
+              <button
+                type="button"
+                onClick={() => void validateReview()}
+                className="md-button"
+              >
                 Validate review
               </button>
             </div>
@@ -631,27 +759,121 @@ export default function EstimatorBudgetReview({
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+                    gridTemplateColumns: responsiveGrid,
                     gap: 10,
                   }}
                 >
-                  <div><small>Accounting project</small><b style={{ display: "block", marginTop: 4 }}>{prepared.project.name}</b></div>
-                  <div><small>Direct cost</small><b style={{ display: "block", marginTop: 4 }}>{money(prepared.args.budget_direct_cost, candidate.currency)}</b></div>
-                  <div><small>Allowance / reserve</small><b style={{ display: "block", marginTop: 4 }}>{money(prepared.args.budget_allowance_total, candidate.currency)}</b></div>
-                  <div><small>Reviewed internal budget</small><b style={{ display: "block", marginTop: 4 }}>{money(prepared.args.budget_internal_cost, candidate.currency)}</b></div>
+                  <div>
+                    <small>Accounting project</small>
+                    <b style={{ display: "block", marginTop: 4 }}>
+                      {prepared.project.name}
+                    </b>
+                  </div>
+                  <div>
+                    <small>Direct cost</small>
+                    <b style={{ display: "block", marginTop: 4 }}>
+                      {money(
+                        prepared.args.budget_direct_cost,
+                        candidate.currency,
+                      )}
+                    </b>
+                  </div>
+                  <div>
+                    <small>Allowance / reserve</small>
+                    <b style={{ display: "block", marginTop: 4 }}>
+                      {money(
+                        prepared.args.budget_allowance_total,
+                        candidate.currency,
+                      )}
+                    </b>
+                  </div>
+                  <div>
+                    <small>Reviewed internal budget</small>
+                    <b style={{ display: "block", marginTop: 4 }}>
+                      {money(
+                        prepared.args.budget_internal_cost,
+                        candidate.currency,
+                      )}
+                    </b>
+                  </div>
                 </div>
-                <p style={{ margin: 0, color: "#617286", fontSize: 12, lineHeight: 1.6 }}>
-                  Source Version {prepared.args.estimator_version} is fingerprinted and will stage as a draft. Re-importing the same reviewed source will not create a duplicate budget.
-                </p>
-                <button
-                  type="button"
-                  disabled={!bridgeEnabled}
-                  title={bridgeEnabled ? "Database staging is enabled" : "Database staging is intentionally disabled on this preview branch"}
-                  className="md-button"
-                  style={{ opacity: bridgeEnabled ? 1 : 0.45, cursor: bridgeEnabled ? "pointer" : "not-allowed" }}
+                <p
+                  style={{
+                    margin: 0,
+                    color: "#617286",
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                  }}
                 >
-                  {bridgeEnabled ? "Stage draft budget" : "Stage disabled until migration approval"}
-                </button>
+                  Source Version {prepared.args.estimator_version} is fingerprinted
+                  and stages as a draft. Re-importing the same reviewed source will
+                  not create a duplicate budget.
+                </p>
+
+                {!bridgeEnabled ? (
+                  <button
+                    type="button"
+                    disabled
+                    className="md-button"
+                    style={{ opacity: 0.45, cursor: "not-allowed" }}
+                  >
+                    Stage disabled until migration approval
+                  </button>
+                ) : !stagedBudget ? (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={stagePreparedBudget}
+                    className="md-button"
+                    style={{ opacity: isPending ? 0.65 : 1 }}
+                  >
+                    {isPending ? "Staging…" : "Stage draft budget"}
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 10,
+                      padding: 12,
+                      borderRadius: 14,
+                      background: "white",
+                      border: "1px solid #d8e1ea",
+                    }}
+                  >
+                    <div>
+                      <small>Staged Accounting budget</small>
+                      <b style={{ display: "block", marginTop: 4 }}>
+                        Version {stagedBudget.budget_version} ·{" "}
+                        {stagedBudget.budget_status.replaceAll("_", " ")}
+                      </b>
+                    </div>
+                    {approvedStatus || stagedBudget.budget_status === "approved" ? (
+                      <span
+                        style={{
+                          borderRadius: 999,
+                          padding: "9px 12px",
+                          background: "#eef9f3",
+                          color: "#176b48",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          width: "fit-content",
+                        }}
+                      >
+                        Approved project-cost baseline
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={approveStagedBudget}
+                        className="md-button"
+                        style={{ opacity: isPending ? 0.65 : 1 }}
+                      >
+                        {isPending ? "Approving…" : "Approve reviewed budget"}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ) : null}
           </section>
