@@ -18,7 +18,12 @@ export default function EstimateTab(){
   const [selected,setSelected]=useState<EntryMode>("boq");
   const router=useRouter();
   const active=modes.find((item)=>item.id===selected)!;
-  const canOpenBoq=selected==="boq"||selected==="studio";
+  const canContinue=selected==="boq"||selected==="studio";
+
+  function openSelected(){
+    if(selected==="boq")router.push("/upload-boq");
+    else if(selected==="studio")router.push("/boq-studio");
+  }
 
   return <SafeAreaView style={styles.safe} edges={["top"]}>
     <ScrollView contentContainerStyle={styles.page}>
@@ -47,7 +52,7 @@ export default function EstimateTab(){
           <Text style={styles.flowText}>Materials</Text><Text style={styles.arrow}>→</Text>
           <Text style={styles.flowText}>Create Project</Text>
         </View>
-        {canOpenBoq&&<Pressable style={styles.openButton} onPress={()=>router.push("/boq-studio")}><Text style={styles.openButtonText}>Open sectioned BOQ</Text></Pressable>}
+        {canContinue&&<Pressable style={styles.openButton} onPress={openSelected}><Text style={styles.openButtonText}>{selected==="boq"?"Upload Excel BOQ":"Open BOQ Studio"}</Text></Pressable>}
         <Text style={styles.safety}>Tap a BOQ quantity to see the materials behind that exact item. AI interprets. Deterministic rules calculate. The user confirms before an estimate becomes a project budget.</Text>
       </View>
     </ScrollView>
