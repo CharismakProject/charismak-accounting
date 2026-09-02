@@ -22,6 +22,13 @@ export const estimatorBridgeLineSchema = z.object({
   supplyResponsibility: supplyResponsibilitySchema.optional(),
 });
 
+export const estimatorBridgeAllowanceSchema = z.object({
+  sourceAllowanceId: z.string().trim().min(1).max(200),
+  kind: z.enum(["contingency", "other"]),
+  description: z.string().trim().min(1).max(1000),
+  amount: money,
+});
+
 export const estimatorBridgeSnapshotSchema = z.object({
   source: z.literal("charismak_estimator"),
   sourceProjectId: z.string().trim().min(1).max(240),
@@ -34,6 +41,7 @@ export const estimatorBridgeSnapshotSchema = z.object({
   priceBasisAt: z.string().datetime({ offset: true }).optional(),
   reviewed: z.literal(true),
   lines: z.array(estimatorBridgeLineSchema).min(1).max(20_000),
+  allowances: z.array(estimatorBridgeAllowanceSchema).max(100).default([]),
 });
 
 export type EstimatorBridgeSnapshotInput = z.input<
@@ -43,6 +51,7 @@ export type EstimatorBridgeSnapshot = z.output<
   typeof estimatorBridgeSnapshotSchema
 >;
 export type SupplyResponsibility = z.infer<typeof supplyResponsibilitySchema>;
+export type EstimatorBridgeAllowance = z.output<typeof estimatorBridgeAllowanceSchema>;
 
 export type NormalizedEstimatorBudgetLine = {
   sourceLineId: string;
@@ -56,13 +65,21 @@ export type NormalizedEstimatorBudgetLine = {
   supplyResponsibility: SupplyResponsibility;
 };
 
+export type NormalizedEstimatorBudgetAllowance = {
+  sourceAllowanceId: string;
+  kind: "contingency" | "other";
+  description: string;
+  amount: number;
+};
+
 export type EstimatorBridgeWarning = {
   code:
     | "duplicate_source_line_id"
+    | "duplicate_source_allowance_id"
     | "invalid_cost_code"
     | "unclassified_cost_code"
     | "line_arithmetic_mismatch"
-    | "budget_line_total_mismatch";
+    | "budget_total_mismatch";
   message: string;
   sourceLineId?: string;
 };
@@ -79,7 +96,10 @@ export type NormalizedEstimatorBridge = {
   priceBasisAt: string | null;
   reviewed: true;
   lines: NormalizedEstimatorBudgetLine[];
+  allowances: NormalizedEstimatorBudgetAllowance[];
   lineTotal: number;
+  allowanceTotal: number;
+  reconciledBudgetTotal: number;
   warnings: EstimatorBridgeWarning[];
   readyForImport: boolean;
 };
@@ -97,11 +117,14 @@ function relativeDifference(left: number, right: number) {
  * Important: suggested cost codes are never treated as confirmed accounting truth. If a
  * line arrives without a valid code, this function may suggest one to help the reviewer,
  * but `readyForImport` remains false until the Estimator sends an explicit valid code.
+ * Contingency is kept as a reviewed budget allowance instead of being hidden inside a
+ * construction cost code.
  */
 export function normalizeEstimatorBridge(input: unknown): NormalizedEstimatorBridge {
   const snapshot = estimatorBridgeSnapshotSchema.parse(input);
   const warnings: EstimatorBridgeWarning[] = [];
   const seenLineIds = new Set<string>();
+  const seenAllowanceIds = new Set<string>();
 
   const lines = snapshot.lines.map<NormalizedEstimatorBudgetLine>((line) => {
     if (seenLineIds.has(line.sourceLineId)) {
@@ -163,11 +186,31 @@ export function normalizeEstimatorBridge(input: unknown): NormalizedEstimatorBri
     };
   });
 
+  const allowances = snapshot.allowances.map<NormalizedEstimatorBudgetAllowance>((allowance) => {
+    if (seenAllowanceIds.has(allowance.sourceAllowanceId)) {
+      warnings.push({
+        code: "duplicate_source_allowance_id",
+        message: `Duplicate Estimator allowance ID: ${allowance.sourceAllowanceId}`,
+      });
+    }
+    seenAllowanceIds.add(allowance.sourceAllowanceId);
+    return {
+      sourceAllowanceId: allowance.sourceAllowanceId,
+      kind: allowance.kind,
+      description: allowance.description,
+      amount: roundMoney(allowance.amount),
+    };
+  });
+
   const lineTotal = roundMoney(lines.reduce((sum, line) => sum + line.amount, 0));
-  if (relativeDifference(lineTotal, snapshot.internalCostBudget) > 0.01) {
+  const allowanceTotal = roundMoney(
+    allowances.reduce((sum, allowance) => sum + allowance.amount, 0),
+  );
+  const reconciledBudgetTotal = roundMoney(lineTotal + allowanceTotal);
+  if (relativeDifference(reconciledBudgetTotal, snapshot.internalCostBudget) > 0.01) {
     warnings.push({
-      code: "budget_line_total_mismatch",
-      message: `Budget line total (${lineTotal}) differs from internal cost budget (${roundMoney(snapshot.internalCostBudget)}).`,
+      code: "budget_total_mismatch",
+      message: `BOQ lines plus reviewed allowances (${reconciledBudgetTotal}) differ from internal cost budget (${roundMoney(snapshot.internalCostBudget)}).`,
     });
   }
 
@@ -183,7 +226,10 @@ export function normalizeEstimatorBridge(input: unknown): NormalizedEstimatorBri
     priceBasisAt: snapshot.priceBasisAt ?? null,
     reviewed: true,
     lines,
+    allowances,
     lineTotal,
+    allowanceTotal,
+    reconciledBudgetTotal,
     warnings,
     readyForImport:
       warnings.length === 0 &&
@@ -211,6 +257,12 @@ function canonicalizeForFingerprint(snapshot: NormalizedEstimatorBridge) {
       amount: line.amount,
       costCode: line.costCode,
       supplyResponsibility: line.supplyResponsibility,
+    })),
+    allowances: snapshot.allowances.map((allowance) => ({
+      sourceAllowanceId: allowance.sourceAllowanceId,
+      kind: allowance.kind,
+      description: allowance.description,
+      amount: allowance.amount,
     })),
   });
 }
