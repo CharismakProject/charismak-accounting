@@ -16,6 +16,13 @@ export type AccountingProjectSeedBudgetLine = {
   supply_responsibility: "contractor" | "client" | "unknown";
 };
 
+export type AccountingProjectSeedAllowance = {
+  source_allowance_id: string;
+  kind: "contingency" | "other";
+  description: string;
+  amount: number;
+};
+
 export type AccountingProjectSeed = {
   project: {
     name: string;
@@ -40,6 +47,7 @@ export type AccountingProjectSeed = {
     forecast_profit: number | null;
   };
   budgetLines: AccountingProjectSeedBudgetLine[];
+  budgetAllowances: AccountingProjectSeedAllowance[];
 };
 
 /**
@@ -90,6 +98,12 @@ export async function buildAccountingProjectSeed(
       rate: line.rate,
       amount: line.amount,
       supply_responsibility: line.supplyResponsibility,
+    })),
+    budgetAllowances: snapshot.allowances.map((allowance) => ({
+      source_allowance_id: allowance.sourceAllowanceId,
+      kind: allowance.kind,
+      description: allowance.description,
+      amount: allowance.amount,
     })),
   };
 }
