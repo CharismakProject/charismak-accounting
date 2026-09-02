@@ -26,9 +26,9 @@ import MobileMenu from "./MobileMenu";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Charismak Construction Accounting",
-  description: "Construction accounting, project cost control, treasury, approvals and document intelligence",
-  applicationName: "Charismak Construction Accounting",
+  title: "Charismak App",
+  description: "Construction estimating, project control, money, procurement and AI-assisted project intelligence",
+  applicationName: "Charismak App",
 };
 
 export const viewport: Viewport = {
