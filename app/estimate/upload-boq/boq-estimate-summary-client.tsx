@@ -3,13 +3,15 @@
 import { useMemo, useState } from "react";
 import type { SectionedBoq } from "../../../lib/estimate/sectioned-boq";
 import type { WorkingRateMap } from "../../../lib/estimate/estimate-summary";
+import type { ReviewedBoqDecisionMap } from "../../../lib/estimate/review-decision";
 import { buildEstimatePrintHtml, buildEstimateSpreadsheetXml, buildEstimateSummary, ZERO_COMMERCIAL_SETTINGS } from "../../../lib/estimate/estimate-summary";
+import BoqProjectPreviewClient from "./boq-project-preview-client";
 
 const money=(value:number,currency:string)=>new Intl.NumberFormat("en-NG",{style:"currency",currency,maximumFractionDigits:0}).format(value);
 const num=(value:string)=>{const parsed=Number(value);return Number.isFinite(parsed)&&parsed>=0?Math.min(parsed,100):0;};
 const safeName=(value:string)=>value.trim().replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^-+|-+$/g,"")||"estimate";
 
-export default function BoqEstimateSummaryClient({boq,materializedBoq,workingRates,companyName}:{boq:SectionedBoq;materializedBoq:SectionedBoq|null;workingRates:WorkingRateMap;companyName?:string}){
+export default function BoqEstimateSummaryClient({boq,materializedBoq,workingRates,decisions,companyName}:{boq:SectionedBoq;materializedBoq:SectionedBoq|null;workingRates:WorkingRateMap;decisions:ReviewedBoqDecisionMap;companyName?:string}){
   const [settings,setSettings]=useState({...ZERO_COMMERCIAL_SETTINGS});
   const summary=useMemo(()=>buildEstimateSummary({boq,materializedBoq,workingRates,settings}),[boq,materializedBoq,workingRates,settings]);
 
@@ -56,6 +58,8 @@ export default function BoqEstimateSummaryClient({boq,materializedBoq,workingRat
       <div style={{fontSize:9,lineHeight:1.45,color:"#6d7f8c",maxWidth:650}}><b>Export snapshot:</b> PDF/Print and Excel include the commercial summary, every BOQ line with its reviewed working rate, and the reviewed material schedule. Exporting does not create a project or post anything to Accounting.</div>
       <div style={{display:"flex",gap:7,flexWrap:"wrap"}}><button type="button" onClick={openPdf} style={secondary}>PDF / Print</button><button type="button" onClick={downloadExcel} style={primary}>Download Excel</button></div>
     </div>
+
+    <div style={{padding:14,borderTop:"1px solid #e3e9ed",background:"#fff"}}><BoqProjectPreviewClient boq={boq} summary={summary} decisions={decisions}/></div>
   </section>;
 }
 
