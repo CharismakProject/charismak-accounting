@@ -40,8 +40,16 @@ test("review keeps internal budget and commercial value as separate decisions", 
   assert.match(review, /BOQ grand total/);
 });
 
-test("database staging stays feature-gated off until migration approval", () => {
+test("database staging stays feature-gated and approval remains a separate step", () => {
   assert.match(page, /PROJECT_COST_BRIDGE_ENABLED === "true"/);
-  assert.match(review, /disabled=\{!bridgeEnabled\}/);
   assert.match(review, /Stage disabled until migration approval/);
+  assert.match(review, /stageReviewedEstimatorBudget/);
+  assert.match(review, /approveReviewedProjectCostBudget/);
+  assert.match(review, /Stage draft budget/);
+  assert.match(review, /Approve reviewed budget/);
+});
+
+test("cost-code review rows use a responsive auto-fit grid", () => {
+  assert.match(review, /repeat\(auto-fit,minmax\(min\(100%,220px\),1fr\)\)/);
+  assert.doesNotMatch(review, /minmax\(0,1\.4fr\) minmax\(180px/);
 });
