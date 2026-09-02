@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -7,22 +8,24 @@ type EntryMode = "quick" | "build" | "boq" | "drawing" | "measured" | "studio";
 const modes: Array<{id:EntryMode; title:string; note:string; badge:string}> = [
   {id:"quick",title:"Quick Estimate",note:"Fast preliminary cost for a homeowner or early decision.",badge:"Simple"},
   {id:"build",title:"Build Estimate",note:"Answer guided questions and enter dimensions for a fuller estimate.",badge:"Guided"},
-  {id:"boq",title:"Upload BOQ",note:"Bring an existing priced or unpriced BOQ for review, pricing and materials.",badge:"Import"},
+  {id:"boq",title:"Upload BOQ",note:"Bring an existing priced or unpriced BOQ for sectioned review, pricing and materials.",badge:"Import"},
   {id:"drawing",title:"Upload Drawing",note:"AI-assisted interpretation first, with user review before quantities are accepted.",badge:"AI review"},
   {id:"measured",title:"Enter Quantities",note:"For QSs and contractors who already have measured quantities.",badge:"Professional"},
-  {id:"studio",title:"BOQ Studio",note:"Create, edit, price and convert BOQs into project cost baselines.",badge:"Workspace"},
+  {id:"studio",title:"BOQ Studio",note:"Create, edit, price and convert sectioned BOQs into project cost baselines.",badge:"Workspace"},
 ];
 
 export default function EstimateTab(){
   const [selected,setSelected]=useState<EntryMode>("boq");
+  const router=useRouter();
   const active=modes.find((item)=>item.id===selected)!;
+  const canOpenBoq=selected==="boq"||selected==="studio";
 
   return <SafeAreaView style={styles.safe} edges={["top"]}>
     <ScrollView contentContainerStyle={styles.page}>
       <View style={styles.header}>
         <Text style={styles.eyebrow}>CHARISMAK APP · ESTIMATE</Text>
         <Text style={styles.title}>What are you trying to estimate?</Text>
-        <Text style={styles.subtitle}>Start with what you already have. Every route will feed the same project-cost engine.</Text>
+        <Text style={styles.subtitle}>Start with what you already have. Every route will feed the same sectioned BOQ and project-cost engine.</Text>
       </View>
 
       <View style={styles.grid}>
@@ -40,10 +43,12 @@ export default function EstimateTab(){
           <Text style={styles.flowText}>Input</Text><Text style={styles.arrow}>→</Text>
           <Text style={styles.flowText}>Review</Text><Text style={styles.arrow}>→</Text>
           <Text style={styles.flowText}>Quantities</Text><Text style={styles.arrow}>→</Text>
-          <Text style={styles.flowText}>BOQ</Text><Text style={styles.arrow}>→</Text>
+          <Text style={styles.flowText}>Sectioned BOQ</Text><Text style={styles.arrow}>→</Text>
+          <Text style={styles.flowText}>Materials</Text><Text style={styles.arrow}>→</Text>
           <Text style={styles.flowText}>Create Project</Text>
         </View>
-        <Text style={styles.safety}>AI interprets. Deterministic rules calculate. The user confirms before an estimate becomes a project budget.</Text>
+        {canOpenBoq&&<Pressable style={styles.openButton} onPress={()=>router.push("/boq-studio")}><Text style={styles.openButtonText}>Open sectioned BOQ</Text></Pressable>}
+        <Text style={styles.safety}>Tap a BOQ quantity to see the materials behind that exact item. AI interprets. Deterministic rules calculate. The user confirms before an estimate becomes a project budget.</Text>
       </View>
     </ScrollView>
   </SafeAreaView>;
@@ -70,5 +75,7 @@ const styles=StyleSheet.create({
   flow:{flexDirection:"row",flexWrap:"wrap",alignItems:"center",gap:5,marginTop:5},
   flowText:{fontSize:10,fontWeight:"800",color:"#173f5a",backgroundColor:"#eef4f7",paddingHorizontal:8,paddingVertical:6,borderRadius:8},
   arrow:{color:"#81909d"},
+  openButton:{marginTop:5,backgroundColor:"#0b668f",paddingVertical:12,paddingHorizontal:14,borderRadius:12,alignItems:"center"},
+  openButtonText:{fontSize:12,fontWeight:"900",color:"#fff"},
   safety:{marginTop:6,fontSize:10,lineHeight:15,color:"#6a7f8f"},
 });
