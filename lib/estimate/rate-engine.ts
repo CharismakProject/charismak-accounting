@@ -123,7 +123,7 @@ export function reviewBoqRate(input: {
   const reference = input.reference ?? null;
   const explicitSelected = finitePositive(input.selectedRate) ? input.selectedRate : null;
   const workingRate = explicitSelected ?? importedRate;
-  const workingRateSource = explicitSelected
+  const workingRateSource = explicitSelected !== null
     ? input.selectedSource ?? "manual"
     : importedRate !== null
       ? "imported"
