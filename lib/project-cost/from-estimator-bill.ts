@@ -107,6 +107,7 @@ const asString = (value: unknown) =>
 const asNumber = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
 const money = (value: unknown) => Math.round((asNumber(value) ?? 0) * 100) / 100;
+const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
 function rawTotals(input: unknown) {
   const totals = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
@@ -176,10 +177,10 @@ export function buildEstimatorBillReviewCandidate(
         description,
         unit,
         quantity,
-        amount: amount == null ? null : Math.round(amount * 100) / 100,
+        amount: amount == null ? null : roundMoney(amount),
         impliedRate:
           amount != null && quantity != null && quantity > 0
-            ? Math.round((amount / quantity) * 100) / 100
+            ? roundMoney(amount / quantity)
             : null,
         providedCostCode,
         needsCostCodeReview: !providedCostCode,
@@ -198,7 +199,7 @@ export function buildEstimatorBillReviewCandidate(
     totals,
     suggestedInternalCostBases: {
       direct_cost: totals.directCost,
-      direct_plus_contingency: Math.round((totals.directCost + totals.contingency) * 100) / 100,
+      direct_plus_contingency: roundMoney(totals.directCost + totals.contingency),
     },
     suggestedCommercialBases: {
       subtotal_before_tax: totals.subTotalBeforeTax,
@@ -223,12 +224,19 @@ export function approveEstimatorBillCandidate(
     throw new Error("All Estimator bill lines must be priced before Accounting import.");
   }
 
+  const directCost = candidate.suggestedInternalCostBases.direct_cost;
   const internalCostBudget =
     decisions.internalCostBasis.kind === "direct_cost"
-      ? candidate.suggestedInternalCostBases.direct_cost
+      ? directCost
       : decisions.internalCostBasis.kind === "direct_plus_contingency"
         ? candidate.suggestedInternalCostBases.direct_plus_contingency
-        : decisions.internalCostBasis.amount;
+        : roundMoney(decisions.internalCostBasis.amount);
+
+  if (!Number.isFinite(internalCostBudget) || internalCostBudget < directCost) {
+    throw new Error(
+      "Internal cost budget cannot be below the priced direct BOQ cost. Revise the BOQ or choose a budget at least equal to direct cost.",
+    );
+  }
 
   const contractValue =
     decisions.contractValueBasis.kind === "subtotal_before_tax"
@@ -236,8 +244,12 @@ export function approveEstimatorBillCandidate(
       : decisions.contractValueBasis.kind === "grand_total"
         ? candidate.suggestedCommercialBases.grand_total
         : decisions.contractValueBasis.kind === "explicit"
-          ? decisions.contractValueBasis.amount
+          ? roundMoney(decisions.contractValueBasis.amount)
           : undefined;
+
+  if (contractValue != null && (!Number.isFinite(contractValue) || contractValue < 0)) {
+    throw new Error("Contract value must be a valid non-negative amount.");
+  }
 
   const lines = candidate.lines.map((line) => {
     const decision = decisions.lineDecisions[line.sourceLineId];
@@ -258,6 +270,24 @@ export function approveEstimatorBillCandidate(
     };
   });
 
+  const reserve = roundMoney(internalCostBudget - directCost);
+  const allowances: EstimatorBridgeSnapshotInput["allowances"] = [];
+  if (reserve > 0) {
+    const isExactEstimatorContingency =
+      decisions.internalCostBasis.kind === "direct_plus_contingency" &&
+      Math.abs(reserve - candidate.totals.contingency) < 0.01;
+    allowances.push({
+      sourceAllowanceId: isExactEstimatorContingency
+        ? "estimator:contingency"
+        : "reviewed:budget-reserve",
+      kind: isExactEstimatorContingency ? "contingency" : "other",
+      description: isExactEstimatorContingency
+        ? "Estimator contingency allowance"
+        : "Reviewed project budget reserve",
+      amount: reserve,
+    });
+  }
+
   return {
     source: "charismak_estimator",
     sourceProjectId: candidate.sourceProjectId,
@@ -270,5 +300,6 @@ export function approveEstimatorBillCandidate(
     priceBasisAt: candidate.priceBasisAt ?? undefined,
     reviewed: true,
     lines,
+    allowances,
   };
 }
