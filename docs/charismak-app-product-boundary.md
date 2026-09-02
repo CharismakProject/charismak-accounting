@@ -126,6 +126,8 @@ The App does not assume whether VAT is inside or outside the signed contract sum
 
 A staging snapshot is not ready while required BOQ lines are unpriced, item review is incomplete, or reviewed cost codes are unresolved.
 
+**Stage reviewed project snapshot** currently means only: produce a versioned reviewed hand-off snapshot. It is not a live `Create Project` database mutation.
+
 The current project staging output is persistence-free and versioned. It does not insert a project or budget into the live database. Live creation requires the destination schema/access bridge to be approved first.
 
 ## Repository transition
