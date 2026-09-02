@@ -6,6 +6,7 @@ import { createClient } from "../../../lib/supabase/client";
 import type { SectionedBoq } from "../../../lib/estimate/sectioned-boq";
 import SectionedBoqClient from "../boq/sectioned-boq-client";
 import BoqReviewClient from "./boq-review-client";
+import BoqRateClient from "./boq-rate-client";
 
 type Warning = { sheet: string; row?: number; message: string };
 type ParseResult = {
@@ -53,7 +54,7 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
       const parsed=data as ParseResult;
       if(parsed.error&&!parsed.boq)throw new Error(parsed.error);
       setResult(parsed);
-      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Confirm the meaning of the bill before rates or materials become authoritative.`:"No BOQ items were detected.");
+      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Confirm the meaning of the bill and working rates before materials or project budgets become authoritative.`:"No BOQ items were detected.");
     }catch(error){
       setMessage(error instanceof Error?error.message:"Could not parse this BOQ.");
     }finally{
@@ -68,7 +69,7 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
       <header className="page-heading compact">
         <p className="page-eyebrow">EXCEL BOQ IMPORT</p>
         <h1>Upload the BOQ you already use</h1>
-        <p>Charismak detects common heading variations and column orders, keeps the bill sectioned, and lets you review the result before anything becomes an estimate or project budget.</p>
+        <p>Charismak detects common heading variations and column orders, keeps the bill sectioned, and lets you review meaning and rates before anything becomes an estimate or project budget.</p>
       </header>
 
       <section className="data-card" style={{padding:18,display:"grid",gap:13}}>
@@ -94,13 +95,14 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
             {result.reviewSummary&&<><span>·</span><span><b>{result.reviewSummary.clearItems}</b> clear suggestion(s)</span><span>·</span><span><b>{result.reviewSummary.attentionItems}</b> need attention</span></>}
             {(result.skippedSheets?.length??0)>0&&<><span>·</span><span><b>{result.skippedSheets!.length}</b> non-BOQ sheet(s) skipped</span></>}
           </div>
-          <p style={{margin:0,fontSize:11,lineHeight:1.55,color:"#6b7f8e"}}>The review intelligence suggests classification, material-recipe family and supply responsibility. Suggestions are not approvals and do not post to Accounting.</p>
+          <p style={{margin:0,fontSize:11,lineHeight:1.55,color:"#6b7f8e"}}>Review order: meaning first, working rates second, material quantities third. None of these review screens posts to Accounting.</p>
         </section>
 
         <BoqReviewClient boq={result.boq}/>
+        <BoqRateClient boq={result.boq}/>
 
         <section style={{marginTop:14}}>
-          <div style={{fontSize:11,color:"#687d8c",marginBottom:8}}><b>Quantity drilldown:</b> the original sectioned bill stays available below. Material quantities will populate after the Materials phase converts confirmed recipe families into deterministic recipes.</div>
+          <div style={{fontSize:11,color:"#687d8c",marginBottom:8}}><b>Quantity drilldown:</b> the original sectioned bill stays available below. Material quantities will populate after confirmed recipe families are converted into deterministic recipes.</div>
           <SectionedBoqClient boq={result.boq}/>
         </section>
 
