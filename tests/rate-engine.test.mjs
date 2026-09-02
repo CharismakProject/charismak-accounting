@@ -59,6 +59,14 @@ test("user can explicitly choose a Charismak reference rate", () => {
   assert.equal(priceBoqLine(100,selected),1900000);
 });
 
+test("zero-value working rate is preserved for no-charge or client-supplied lines", () => {
+  const initial = reviewBoqRate({importedRate:5000,reference:null});
+  const selected = selectWorkingRate(initial,{rate:0,source:"manual"});
+  assert.equal(selected.workingRate,0);
+  assert.equal(selected.workingRateSource,"manual");
+  assert.equal(priceBoqLine(25,selected),0);
+});
+
 test("without a reference, imported rates remain usable and clearly marked", () => {
   const review = reviewBoqRate({importedRate:2500,reference:null});
   assert.equal(review.status,"reference_unavailable");
