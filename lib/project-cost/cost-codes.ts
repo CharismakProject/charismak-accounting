@@ -1,7 +1,7 @@
 export type CostCodeGroup = {
   code: string;
   name: string;
-  aliases?: string[];
+  aliases?: readonly string[];
 };
 
 /**
@@ -13,7 +13,7 @@ export type CostCodeGroup = {
  * - estimates, BOQ items, commitments and actual transactions should map to one code;
  * - client contract value and internal cost budget remain separate commercial concepts.
  */
-export const COST_CODE_GROUPS: readonly CostCodeGroup[] = [
+export const COST_CODE_GROUPS = [
   { code: "01", name: "Preliminaries", aliases: ["prelims", "general requirements"] },
   { code: "02", name: "Substructure", aliases: ["foundation", "substructure works"] },
   { code: "03", name: "Concrete & Reinforcement", aliases: ["concrete", "reinforcement", "rebar", "formwork"] },
@@ -34,7 +34,7 @@ export const COST_CODE_GROUPS: readonly CostCodeGroup[] = [
   { code: "18", name: "External Works", aliases: ["external works", "landscaping", "drainage external", "fence"] },
   { code: "19", name: "Plant, Equipment & Specialist Works", aliases: ["equipment", "specialist", "plant"] },
   { code: "20", name: "Professional, Statutory & Other", aliases: ["professional fees", "permits", "statutory", "other"] },
-] as const;
+] as const satisfies readonly CostCodeGroup[];
 
 export type CostCode = (typeof COST_CODE_GROUPS)[number]["code"];
 
@@ -51,10 +51,10 @@ export function suggestCostCode(description: string): CostCode | null {
   if (!normalized) return null;
 
   const match = COST_CODE_GROUPS.find((group) =>
-    [group.name, ...(group.aliases ?? [])].some((term) =>
+    [group.name, ...group.aliases].some((term) =>
       normalized.includes(term.toLowerCase()),
     ),
   );
 
-  return (match?.code as CostCode | undefined) ?? null;
+  return match?.code ?? null;
 }
