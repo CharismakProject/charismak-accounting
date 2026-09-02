@@ -13,6 +13,7 @@ test("225mm blockwork produces traceable blocks, cement and sand",()=>{
   assert.equal(breakdown.materials[0].totalQuantity,1050);
   assert.equal(breakdown.materials.some(m=>m.material==="Cement"),true);
   assert.equal(breakdown.materials.some(m=>m.material==="Sharp sand"),true);
+  assert.match(breakdown.assumptions.join(" "),/1:6/);
 });
 
 test("unconfirmed recipe never calculates materials",()=>{
@@ -34,6 +35,14 @@ test("generic concrete does not invent a mix without parameters",()=>{
   assert.match(breakdown.assumptions[0],/specification parameters/i);
 });
 
+test("roofing, painting and MEP stay specification-required",()=>{
+  for(const recipeFamily of ["roofing","painting","ceiling","plumbing_installation","electrical_installation"]){
+    const breakdown=buildMaterialBreakdown({item:item({description:String(recipeFamily),unit:"m2",quantity:20}),decision:{recipeFamily,supplyResponsibility:"contractor",confirmed:true}});
+    assert.equal(breakdown.status,"needs_review");
+    assert.equal(breakdown.materials.length,0);
+  }
+});
+
 test("tiling V1 calculates finish area but does not invent adhesive/grout",()=>{
   const breakdown=buildMaterialBreakdown({item:item({description:"Porcelain floor tiles",quantity:200}),decision:{recipeFamily:"floor_tiling",supplyResponsibility:"contractor",confirmed:true}});
   assert.equal(breakdown.status,"available");
@@ -41,6 +50,17 @@ test("tiling V1 calculates finish area but does not invent adhesive/grout",()=>{
   assert.equal(breakdown.materials[0].material,"Floor tile finish");
   assert.equal(breakdown.materials[0].totalQuantity,210);
   assert.match(breakdown.assumptions.join(" "),/adhesive/i);
+});
+
+test("plastering and screeding expose thickness/mix assumptions",()=>{
+  const plaster=buildMaterialBreakdown({item:item({description:"Plaster",quantity:100}),decision:{recipeFamily:"plastering",supplyResponsibility:"contractor",confirmed:true}});
+  const screed=buildMaterialBreakdown({item:item({description:"Screed",quantity:100}),decision:{recipeFamily:"screeding",supplyResponsibility:"contractor",confirmed:true}});
+  assert.equal(plaster.status,"available");
+  assert.equal(screed.status,"available");
+  assert.match(plaster.assumptions.join(" "),/12mm/);
+  assert.match(plaster.assumptions.join(" "),/1:4/);
+  assert.match(screed.assumptions.join(" "),/25mm/);
+  assert.match(screed.assumptions.join(" "),/1:4/);
 });
 
 test("reinforcement converts tonnes to kg and adds binding wire",()=>{
@@ -51,6 +71,13 @@ test("reinforcement converts tonnes to kg and adds binding wire",()=>{
   assert.equal(steel.baseQuantity,2000);
   assert.equal(steel.totalQuantity,2100);
   assert.equal(wire.baseQuantity,30);
+});
+
+test("wrong measurement units are flagged instead of coerced",()=>{
+  const blockwork=buildMaterialBreakdown({item:item({unit:"m3"}),decision:{recipeFamily:"blockwork_225",supplyResponsibility:"contractor",confirmed:true}});
+  const reinforcement=buildMaterialBreakdown({item:item({unit:"m2"}),decision:{recipeFamily:"reinforcement",supplyResponsibility:"contractor",confirmed:true}});
+  assert.equal(blockwork.status,"needs_review");
+  assert.equal(reinforcement.status,"needs_review");
 });
 
 test("material summary keeps reverse source-item traceability",()=>{
