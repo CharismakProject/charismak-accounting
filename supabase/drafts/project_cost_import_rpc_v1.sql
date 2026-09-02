@@ -41,7 +41,7 @@ begin
     raise exception 'Authentication is required.' using errcode='42501';
   end if;
 
-  if not private.has_company_role(target_company,array['md']::company_role[]) then
+  if not private.has_company_role(target_company,array['md']::public.company_role[]) then
     raise exception 'Only an MD can stage an Estimator budget.' using errcode='42501';
   end if;
 
@@ -304,10 +304,7 @@ $$;
 
 revoke all on function private.stage_estimator_budget_v1_impl(
   uuid,uuid,text,text,integer,text,timestamptz,text,numeric,numeric,numeric,numeric,jsonb,jsonb
-) from public,anon;
-grant execute on function private.stage_estimator_budget_v1_impl(
-  uuid,uuid,text,text,integer,text,timestamptz,text,numeric,numeric,numeric,numeric,jsonb,jsonb
-) to authenticated;
+) from public,anon,authenticated;
 
 create or replace function public.stage_estimator_budget_v1(
   target_company uuid,
@@ -327,7 +324,7 @@ create or replace function public.stage_estimator_budget_v1(
 )
 returns jsonb
 language sql
-security invoker
+security definer
 set search_path=''
 as $$
   select private.stage_estimator_budget_v1_impl(
@@ -368,7 +365,7 @@ begin
     raise exception 'Budget not found.' using errcode='P0002';
   end if;
 
-  if not private.has_company_role(budget.company_id,array['md']::company_role[]) then
+  if not private.has_company_role(budget.company_id,array['md']::public.company_role[]) then
     raise exception 'Only an MD can approve a project cost budget.' using errcode='42501';
   end if;
 
@@ -401,13 +398,12 @@ begin
 end;
 $$;
 
-revoke all on function private.approve_project_cost_budget_v1_impl(uuid) from public,anon;
-grant execute on function private.approve_project_cost_budget_v1_impl(uuid) to authenticated;
+revoke all on function private.approve_project_cost_budget_v1_impl(uuid) from public,anon,authenticated;
 
 create or replace function public.approve_project_cost_budget_v1(target_budget uuid)
 returns jsonb
 language sql
-security invoker
+security definer
 set search_path=''
 as $$
   select private.approve_project_cost_budget_v1_impl(target_budget);
