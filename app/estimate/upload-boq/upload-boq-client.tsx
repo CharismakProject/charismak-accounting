@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { createClient } from "../../../lib/supabase/client";
 import type { SectionedBoq } from "../../../lib/estimate/sectioned-boq";
 import SectionedBoqClient from "../boq/sectioned-boq-client";
+import BoqReviewClient from "./boq-review-client";
 
 type Warning = { sheet: string; row?: number; message: string };
 type ParseResult = {
@@ -15,6 +16,7 @@ type ParseResult = {
   recognizedSheets?: string[];
   skippedSheets?: string[];
   itemCount?: number;
+  reviewSummary?: { clearItems: number; attentionItems: number; totalItems: number };
 };
 
 const MAX_BYTES = 12 * 1024 * 1024;
@@ -45,13 +47,13 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
     try{
       const {error:uploadError}=await supabase.storage.from("universal-intake").upload(storagePath,file,{contentType:file.type||undefined,upsert:false});
       if(uploadError)throw new Error(uploadError.message);
-      setMessage("Detecting sheets, headings, sections and BOQ items…");
+      setMessage("Detecting sheets, headings, sections, BOQ items and review suggestions…");
       const {data,error}=await supabase.functions.invoke("parse-boq-workbook",{body:{bucket:"universal-intake",storagePath,fileName:file.name}});
       if(error)throw new Error(error.message||"BOQ parser could not run.");
       const parsed=data as ParseResult;
       if(parsed.error&&!parsed.boq)throw new Error(parsed.error);
       setResult(parsed);
-      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Review the sections and quantities below.`:"No BOQ items were detected.");
+      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Confirm the meaning of the bill before rates or materials become authoritative.`:"No BOQ items were detected.");
     }catch(error){
       setMessage(error instanceof Error?error.message:"Could not parse this BOQ.");
     }finally{
@@ -89,13 +91,21 @@ export default function UploadBoqClient({ companyId }: { companyId: string }){
             <span><b>{result.recognizedSheets?.length??0}</b> recognized sheet(s)</span><span>·</span>
             <span><b>{result.boq.sections.length}</b> section(s)</span><span>·</span>
             <span><b>{result.itemCount??0}</b> item(s)</span>
+            {result.reviewSummary&&<><span>·</span><span><b>{result.reviewSummary.clearItems}</b> clear suggestion(s)</span><span>·</span><span><b>{result.reviewSummary.attentionItems}</b> need attention</span></>}
             {(result.skippedSheets?.length??0)>0&&<><span>·</span><span><b>{result.skippedSheets!.length}</b> non-BOQ sheet(s) skipped</span></>}
           </div>
-          <p style={{margin:0,fontSize:11,lineHeight:1.55,color:"#6b7f8e"}}>This is a review preview only. Material recipes are intentionally marked for review until the BOQ Review + Materials phases confirm how each work item should be broken down.</p>
+          <p style={{margin:0,fontSize:11,lineHeight:1.55,color:"#6b7f8e"}}>The review intelligence suggests classification, material-recipe family and supply responsibility. Suggestions are not approvals and do not post to Accounting.</p>
         </section>
-        <div style={{marginTop:14}}><SectionedBoqClient boq={result.boq}/></div>
+
+        <BoqReviewClient boq={result.boq}/>
+
+        <section style={{marginTop:14}}>
+          <div style={{fontSize:11,color:"#687d8c",marginBottom:8}}><b>Quantity drilldown:</b> the original sectioned bill stays available below. Material quantities will populate after the Materials phase converts confirmed recipe families into deterministic recipes.</div>
+          <SectionedBoqClient boq={result.boq}/>
+        </section>
+
         {(result.warnings?.length??0)>0&&<section className="data-card" style={{marginTop:14,padding:16}}>
-          <small style={{fontSize:9,fontWeight:900,letterSpacing:".1em",color:"#936814"}}>NEEDS REVIEW</small>
+          <small style={{fontSize:9,fontWeight:900,letterSpacing:".1em",color:"#936814"}}>IMPORT NOTES</small>
           <h2 style={{margin:"5px 0 8px",fontSize:16,color:"#173f5a"}}>{result.warnings!.length} import note{result.warnings!.length===1?"":"s"}</h2>
           <div style={{display:"grid",gap:6,maxHeight:280,overflowY:"auto"}}>{result.warnings!.map((warning,index)=><div key={`${warning.sheet}-${warning.row??0}-${index}`} style={{fontSize:11,lineHeight:1.45,color:"#6e6250",borderTop:index?"1px solid #edf0f2":0,paddingTop:index?7:0}}><b>{warning.sheet}{warning.row?` · row ${warning.row}`:""}:</b> {warning.message}</div>)}</div>
         </section>}
