@@ -34,6 +34,7 @@ export type ProjectBudgetAllowancePreview = {
 };
 
 export type ProjectCreationPreview = {
+  sourceEstimateId: string;
   project: {
     name: string;
     currency: string;
@@ -43,8 +44,12 @@ export type ProjectCreationPreview = {
   commercialSnapshot: Pick<EstimateSummary,
     "directCost" | "contingency" | "overhead" | "profit" | "discount" | "subtotalBeforeTax" | "tax" | "grandTotal"
   >;
+  internalDirectCost: number;
+  internalContingencyAllowance: number;
+  clientSuppliedExcludedValue: number;
   budgetLines: ProjectBudgetLinePreview[];
   budgetAllowances: ProjectBudgetAllowancePreview[];
+  materials: EstimateSummary["materials"];
   forecastProfit: number | null;
   issues: string[];
   readyToStage: boolean;
@@ -52,6 +57,7 @@ export type ProjectCreationPreview = {
 
 const validMoney = (value: number | null | undefined) => value != null && Number.isFinite(value) && value >= 0;
 const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const percentage = (value: number) => Number.isFinite(value) ? Math.max(0, Math.min(100, value)) / 100 : 0;
 
 export function buildProjectCreationPreview(input: {
   boq: SectionedBoq;
@@ -69,6 +75,7 @@ export function buildProjectCreationPreview(input: {
   }
 
   const budgetLines: ProjectBudgetLinePreview[] = [];
+  let clientSuppliedExcludedValue = 0;
   for (const line of summary.lines) {
     const decision = decisions[line.itemId];
     if (!decision?.confirmed) {
@@ -84,6 +91,10 @@ export function buildProjectCreationPreview(input: {
       continue;
     }
     if (line.workingRate == null || line.amount == null) continue;
+    if (decision.supplyResponsibility === "client") {
+      clientSuppliedExcludedValue = roundMoney(clientSuppliedExcludedValue + line.amount);
+      continue;
+    }
     budgetLines.push({
       sourceLineId: line.itemId,
       itemNo: line.itemNo,
@@ -97,32 +108,34 @@ export function buildProjectCreationPreview(input: {
     });
   }
 
+  const internalDirectCost = roundMoney(budgetLines.reduce((sum, line) => sum + line.amount, 0));
+  const internalContingencyAllowance = roundMoney(internalDirectCost * percentage(summary.settings.contingencyPercent));
   let internalCostBudget: number | null = null;
   const budgetAllowances: ProjectBudgetAllowancePreview[] = [];
   if (!choice.internalBudgetBasis) {
     issues.push("Choose what becomes the internal project cost budget.");
   } else if (choice.internalBudgetBasis === "direct_cost") {
-    internalCostBudget = summary.directCost;
+    internalCostBudget = internalDirectCost;
   } else if (choice.internalBudgetBasis === "direct_plus_contingency") {
-    internalCostBudget = roundMoney(summary.directCost + summary.contingency);
-    if (summary.contingency > 0) budgetAllowances.push({
+    internalCostBudget = roundMoney(internalDirectCost + internalContingencyAllowance);
+    if (internalContingencyAllowance > 0) budgetAllowances.push({
       sourceAllowanceId: `${boq.id}-contingency`,
       kind: "contingency",
-      description: `Reviewed contingency (${summary.settings.contingencyPercent}%)`,
-      amount: summary.contingency,
+      description: `Reviewed internal contingency (${summary.settings.contingencyPercent}%)`,
+      amount: internalContingencyAllowance,
     });
   } else if (!validMoney(choice.explicitInternalBudget)) {
     issues.push("Enter a valid explicit internal cost budget.");
   } else {
     internalCostBudget = roundMoney(choice.explicitInternalBudget!);
-    if (internalCostBudget < summary.directCost) {
-      issues.push("The explicit internal cost budget cannot be below the reviewed direct cost.");
-    } else if (internalCostBudget > summary.directCost) {
+    if (internalCostBudget < internalDirectCost) {
+      issues.push("The explicit internal cost budget cannot be below the reviewed contractor direct cost.");
+    } else if (internalCostBudget > internalDirectCost) {
       budgetAllowances.push({
         sourceAllowanceId: `${boq.id}-reviewed-reserve`,
         kind: "other",
         description: "Reviewed project cost reserve",
-        amount: roundMoney(internalCostBudget - summary.directCost),
+        amount: roundMoney(internalCostBudget - internalDirectCost),
       });
     }
   }
@@ -145,6 +158,7 @@ export function buildProjectCreationPreview(input: {
     : roundMoney(contractValue - internalCostBudget);
 
   return {
+    sourceEstimateId: boq.id,
     project: {
       name: projectName,
       currency: boq.currency,
@@ -161,8 +175,12 @@ export function buildProjectCreationPreview(input: {
       tax: summary.tax,
       grandTotal: summary.grandTotal,
     },
+    internalDirectCost,
+    internalContingencyAllowance,
+    clientSuppliedExcludedValue,
     budgetLines,
     budgetAllowances,
+    materials: summary.materials,
     forecastProfit,
     issues: uniqueIssues,
     readyToStage: uniqueIssues.length === 0 && internalCostBudget != null,
