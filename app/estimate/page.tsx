@@ -1,12 +1,12 @@
 import Link from "next/link";
 
 const entries = [
-  ["Quick Estimate", "Fast preliminary cost for early decisions."],
-  ["Build Estimate", "Guided dimensions and questions for a fuller building estimate."],
-  ["Upload BOQ", "Bring an existing priced or unpriced BOQ for pricing, materials and review."],
-  ["Upload Drawing", "AI-assisted interpretation with user verification before quantities are accepted."],
-  ["Enter Quantities", "Direct measured-quantity entry for QSs and experienced contractors."],
-  ["BOQ Studio", "Create, edit, price and prepare a BOQ for project conversion."],
+  { title:"Quick Estimate", note:"Fast preliminary cost for early decisions." },
+  { title:"Build Estimate", note:"Guided dimensions and questions for a fuller building estimate." },
+  { title:"Upload BOQ", note:"Bring an existing priced or unpriced BOQ for pricing, materials and review.", href:"/estimate/boq" },
+  { title:"Upload Drawing", note:"AI-assisted interpretation with user verification before quantities are accepted." },
+  { title:"Enter Quantities", note:"Direct measured-quantity entry for QSs and experienced contractors." },
+  { title:"BOQ Studio", note:"Create, edit, price and prepare a sectioned BOQ for project conversion.", href:"/estimate/boq" },
 ] as const;
 
 export default function EstimateHome(){
@@ -16,21 +16,25 @@ export default function EstimateHome(){
       <header className="page-heading compact">
         <p className="page-eyebrow">EXPECTED COST</p>
         <h1>What are you trying to estimate?</h1>
-        <p>Start with a BOQ, drawing, measurements or a simple idea. Each route will eventually feed one reviewed quantity, BOQ and project-cost engine.</p>
+        <p>Start with a BOQ, drawing, measurements or a simple idea. Each route feeds one reviewed quantity, sectioned BOQ and project-cost engine.</p>
       </header>
 
       <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12}}>
-        {entries.map(([title,note])=><article key={title} className="data-card" style={{padding:18}}>
-          <small style={{fontSize:9,fontWeight:900,letterSpacing:".11em",color:"#0b668f"}}>ESTIMATE ENTRY</small>
-          <h2 style={{fontSize:18,margin:"7px 0 5px",color:"#14354d"}}>{title}</h2>
-          <p style={{margin:0,fontSize:12,lineHeight:1.55,color:"#687c8c"}}>{note}</p>
-        </article>)}
+        {entries.map((entry)=>{
+          const card=<article className="data-card" style={{padding:18,height:"100%"}}>
+            <small style={{fontSize:9,fontWeight:900,letterSpacing:".11em",color:"#0b668f"}}>ESTIMATE ENTRY</small>
+            <h2 style={{fontSize:18,margin:"7px 0 5px",color:"#14354d"}}>{entry.title}</h2>
+            <p style={{margin:0,fontSize:12,lineHeight:1.55,color:"#687c8c"}}>{entry.note}</p>
+            {entry.href&&<p style={{margin:"10px 0 0",fontSize:11,fontWeight:900,color:"#0b668f"}}>Open sectioned BOQ →</p>}
+          </article>;
+          return entry.href?<Link key={entry.title} href={entry.href} style={{textDecoration:"none",color:"inherit"}}>{card}</Link>:<div key={entry.title}>{card}</div>;
+        })}
       </section>
 
       <section className="data-card" style={{marginTop:14,padding:18}}>
         <small style={{fontSize:9,fontWeight:900,letterSpacing:".11em",color:"#16825c"}}>ONE PROJECT-COST FLOW</small>
-        <h2 style={{margin:"7px 0",fontSize:19,color:"#14354d"}}>Input → Review → Quantities → BOQ → Materials → Budget → Create Project</h2>
-        <p style={{margin:0,fontSize:12,lineHeight:1.6,color:"#687c8c"}}>AI may interpret descriptions and drawings, but deterministic rules calculate quantities and money. A reviewer confirms the result before it becomes a project budget.</p>
+        <h2 style={{margin:"7px 0",fontSize:19,color:"#14354d"}}>Input → Review → Quantities → Sectioned BOQ → Materials → Budget → Create Project</h2>
+        <p style={{margin:0,fontSize:12,lineHeight:1.6,color:"#687c8c"}}>BOQ sections remain intact. Quantity cells drill into the material recipe and assumptions for that exact work item. AI may interpret descriptions and drawings, but deterministic rules calculate quantities and money before user confirmation.</p>
       </section>
     </div>
   </main>;
