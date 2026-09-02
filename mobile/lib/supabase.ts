@@ -2,8 +2,14 @@ import "react-native-url-polyfill/auto";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://qezwpaeqbkoxrprohall.supabase.co";
-const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_b0_8qUaf9pC7Js2pOOOKDA_JiiBdPaQ";
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+
+if (!url || !key) {
+  throw new Error(
+    "Charismak Accounting mobile Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY.",
+  );
+}
 
 export const supabase = createClient(url, key, {
   auth: {
