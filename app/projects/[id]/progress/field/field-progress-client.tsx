@@ -20,9 +20,10 @@ export default function FieldProgressClient({projectId,userId,workItems}:{projec
   const rawLines=workItems.map(item=>{const e=entries[item.budgetLineId];return{budgetLineId:item.budgetLineId,reportedProgressPercent:Number(e?.progress||0),reportedCompletedQuantity:e?.completed.trim()?Number(e.completed):null,lineNote:e?.note||null};});
   const validation=useMemo(()=>{try{return{lines:prepareFieldProgressLines(workItems,rawLines),error:null as string|null}}catch(error){return{lines:[],error:error instanceof Error?error.message:"Review the field progress entries."}}},[workItems,entries]);
   const evidence=useMemo(()=>assessFieldEvidence(files.map(file=>({name:file.name,mimeType:file.type||null,size:file.size}))),[files]);
+  const disabled=busy||!!validation.error||evidence.warnings.length>0||summary.trim().length<3||!reportDate;
 
   async function submit(){
-    if(busy||validation.error||evidence.warnings.length||summary.trim().length<3)return;
+    if(disabled)return;
     const supabase=createClient();
     const token=crypto.randomUUID();
     const uploaded:string[]=[];
@@ -39,7 +40,7 @@ export default function FieldProgressClient({projectId,userId,workItems}:{projec
       if(error)throw error;
       setFiles([]);setSummary("");setMessage("Field progress submitted for MD review. Project progress has not changed yet.");router.refresh();
     }catch(error){
-      if(uploaded.length)await supabase.storage.from("project-progress-evidence").remove(uploaded).catch(()=>undefined);
+      if(uploaded.length){try{await supabase.storage.from("project-progress-evidence").remove(uploaded);}catch{/* unlinked evidence remains removable by the PM storage policy */}}
       setMessage(error instanceof Error?error.message:"Could not submit field progress.");
     }finally{setBusy(false);}
   }
@@ -54,7 +55,7 @@ export default function FieldProgressClient({projectId,userId,workItems}:{projec
     {!!files.length&&<div style={{display:"grid",gap:4}}>{files.map(file=><small key={`${file.name}-${file.size}`} style={{fontSize:8,color:"#526d7d"}}>{file.name} · {(file.size/1024/1024).toFixed(1)} MB</small>)}</div>}
     {evidence.warnings.map(w=><div key={w} style={warn}>{w}</div>)}
     {message&&<div style={message.includes("submitted")?ok:warn}>{message}</div>}
-    <button type="button" onClick={submit} disabled={busy||!!validation.error||!!evidence.warnings.length||summary.trim().length<3} style={{justifySelf:"start",opacity:busy||validation.error||evidence.warnings.length||summary.trim().length<3?.5:1}}>{busy?"Submitting…":"Submit for MD Review"}</button>
+    <button type="button" onClick={submit} disabled={disabled} style={{justifySelf:"start",opacity:disabled?.5:1}}>{busy?"Submitting…":"Submit for MD Review"}</button>
     <small style={{fontSize:8,lineHeight:1.5,color:"#718391"}}>Submitting does not update authoritative project progress. MD approval is required.</small>
   </section>;
 }
