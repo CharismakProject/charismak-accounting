@@ -139,13 +139,49 @@ begin
   where p.id=target_project_id;
   if company is null then raise exception 'Not authorised for project cost forecast'; end if;
 
+  if exists (
+    select 1
+    from jsonb_array_elements(forecast_lines) submitted(value)
+    group by submitted.value->>'costCode'
+    having count(*) > 1
+  ) then
+    raise exception 'Forecast contains duplicate cost codes';
+  end if;
+
+  -- Validate every submitted line first.
   for line in select value from jsonb_array_elements(forecast_lines)
   loop
-    code := line->>'costCode'; ctc := (line->>'amount')::numeric;
-    if code !~ '^(0[1-9]|1[0-9]|20)$' or ctc < 0 then raise exception 'Invalid forecast line'; end if;
-    select coalesce(sum(greatest(committed_amount-paid_amount,0)),0) into unpaid
-    from public.project_cost_commitments where project_id=target_project_id and cost_code=code and status='open';
-    if ctc < unpaid then raise exception 'Forecast CTC for cost code % is below unpaid commitments',code; end if;
+    code := line->>'costCode';
+    begin
+      ctc := (line->>'amount')::numeric;
+    exception when invalid_text_representation then
+      raise exception 'Invalid forecast line amount for cost code %',coalesce(code,'(missing)');
+    end;
+    if code is null or code !~ '^(0[1-9]|1[0-9]|20)$' or ctc is null or ctc < 0 then raise exception 'Invalid forecast line'; end if;
+  end loop;
+
+  -- Server-side completeness guard: every cost code with an open unpaid commitment
+  -- must be present in the submitted forecast and its CTC must cover that balance.
+  -- This cannot be bypassed by omitting a row from a custom/direct client request.
+  for code,unpaid in
+    select commitment.cost_code,
+           round(sum(greatest(commitment.committed_amount-commitment.paid_amount,0)),2)
+    from public.project_cost_commitments commitment
+    where commitment.project_id=target_project_id
+      and commitment.status='open'
+    group by commitment.cost_code
+    having sum(greatest(commitment.committed_amount-commitment.paid_amount,0)) > 0
+  loop
+    select coalesce(
+      sum((submitted.value->>'amount')::numeric),
+      0
+    ) into ctc
+    from jsonb_array_elements(forecast_lines) submitted(value)
+    where submitted.value->>'costCode'=code;
+
+    if ctc + 0.005 < unpaid then
+      raise exception 'Forecast CTC for cost code % is below unpaid commitments',code;
+    end if;
   end loop;
 
   update public.project_cost_forecasts set status='superseded',superseded_at=now() where project_id=target_project_id and status='approved';
