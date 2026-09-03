@@ -36,7 +36,7 @@ export default function BoqRateClient({boq,onRatesChange}:{boq:SectionedBoq;onRa
   useEffect(()=>{
     onRatesChange?.(Object.fromEntries(priced.map(({item,review})=>[item.id,{
       rate:review.workingRate,
-      source:review.workingRateSource==="imported"?"imported":review.workingRateSource==="manual"?"manual":review.workingRateSource==="reference"?"reference":null,
+      source:review.workingRateSource==="imported"?"imported":review.workingRateSource==="manual"?"manual":review.workingRateSource==="charismak_reference"?"reference":null,
     }])));
   },[onRatesChange,priced]);
 
