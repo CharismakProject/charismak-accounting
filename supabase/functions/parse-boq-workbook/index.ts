@@ -60,11 +60,14 @@ Deno.serve(async (req: Request) => {
     const reviewed = decorateBoqWithReview(parsed.boq);
     const result = { ...parsed, boq: reviewed.boq, reviewSummary: reviewed.reviewSummary };
     if (!parsed.itemCount) {
+      const supportOnly = parsed.supportSheets.length > 0 && parsed.recognizedSheets.length === 0;
       return out({
         ok: false,
-        error: "No BOQ item rows were confidently detected. Check the workbook headings or review the sheet structure.",
+        error: supportOnly
+          ? `No primary BOQ sheet was found. ${parsed.supportSheets.length} support/summary sheet${parsed.supportSheets.length === 1 ? " was" : "s were"} identified and deliberately excluded to prevent double counting. Upload the detailed BOQ/bill workbook.`
+          : "No BOQ item rows were confidently detected. Check the workbook headings or review the sheet structure.",
         ...result,
-      }, 422);
+      });
     }
 
     return out({ ok: true, ...result });
