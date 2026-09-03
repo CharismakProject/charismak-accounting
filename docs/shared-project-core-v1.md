@@ -25,11 +25,11 @@ Keep these concepts separate:
 - contingency/reserve
 - internal approved cost budget
 - contract value/revenue
-- actual paid cost
+- actual cost / actual paid cost
 - unpaid commitments
 - profit/deficit
 
-Profit, VAT and commercial markups must never silently become internal project cost. The original/base contract value remains a commercial snapshot and must not be substituted for the internal cost budget.
+Profit, VAT and commercial markups must never silently become internal project cost. The original/base contract value remains a commercial snapshot and must not be substituted for the internal cost budget. Actual cost comes only from confirmed Money records; it is not inferred from the Estimate or Project budget.
 
 ## BOQ V1 structure
 
@@ -167,7 +167,7 @@ A reviewed estimate may later create or update a Project cost baseline, but this
 
 A repeated source estimate/project import must not create a duplicate Accounting project; the source link and reviewed fingerprint are the idempotency authority.
 
-A source estimate/BOQ should not automatically create transactions or actual spend.
+A source estimate/BOQ should not automatically create transactions or actual spend. No live Estimator or Accounting business records are changed by the shared-core review/staging workflow.
 
 ## Budget vs Actual
 
