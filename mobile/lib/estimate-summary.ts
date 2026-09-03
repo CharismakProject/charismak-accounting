@@ -1,5 +1,5 @@
-import { summarizeMobileMaterials, type MobileMaterialDecision, type MobileMaterialSummary } from "./material-recipe-engine";
-import type { MobileEstimateDecision, MobileEstimateReviewSession } from "./estimate-types";
+import { summarizeMobileMaterials, type MobileMaterialDecision, type MobileMaterialSummary } from "./material-recipe-engine.ts";
+import type { MobileEstimateDecision, MobileEstimateReviewSession } from "./estimate-types.ts";
 
 export type MobileCommercialSettings={contingencyPercent:number;overheadPercent:number;profitPercent:number;discountPercent:number;taxPercent:number};
 export type MobileInternalBudgetBasis="direct_cost"|"direct_plus_contingency"|"explicit";
