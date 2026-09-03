@@ -47,7 +47,7 @@ export default function ProjectFieldProgress(){
       supabase.from("project_progress_field_submissions").select("id,submission_version,report_date,status,submitted_at,review_notes").eq("project_id",id).eq("submitted_by",user.id).order("submitted_at",{ascending:false}).limit(8),
     ]);
     if(error){setMessage(error.message);setLoading(false);return;}
-    const safeItems=(rows??[]).map((row:any)=>({budgetLineId:row.budget_line_id,sourceLineId:row.source_line_id,costCode:row.cost_code,description:row.description,unit:row.unit??null,approvedQuantity:row.approved_quantity==null?null:Number(row.approved_quantity),priorProgressPercent:Number(row.prior_progress_percent??0),priorCompletedQuantity:row.prior_completed_quantity==null?null:Number(row.prior_completed_quantity)}));
+    const safeItems:MobileFieldProgressWorkItem[]=(rows??[]).map((row:any)=>({budgetLineId:row.budget_line_id,sourceLineId:row.source_line_id,costCode:row.cost_code,description:row.description,unit:row.unit??null,approvedQuantity:row.approved_quantity==null?null:Number(row.approved_quantity),priorProgressPercent:Number(row.prior_progress_percent??0),priorCompletedQuantity:row.prior_completed_quantity==null?null:Number(row.prior_completed_quantity)}));
     setWorkItems(safeItems);
     setEntries(Object.fromEntries(safeItems.map(item=>[item.budgetLineId,{progress:String(item.priorProgressPercent),completed:item.priorCompletedQuantity==null?"":String(item.priorCompletedQuantity),note:""}])));
     setHistory(reports??[]);setLoading(false);
