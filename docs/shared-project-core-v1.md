@@ -180,6 +180,34 @@ Paid commitments must not be double counted with actuals.
 
 Statuses include within budget, at risk, over budget and not budgeted.
 
+## Progress Valuation V1
+
+Progress Valuation measures physical completion against the **approved internal direct-work BOQ/budget**, not against the client selling price.
+
+Rules:
+
+- every approved budget line carries a reviewed physical completion percentage;
+- where a reliable completed quantity and approved quantity exist, progress may be derived from `completed quantity ÷ approved quantity`;
+- the overall project percentage is value-weighted: `total Earned Work Value ÷ approved Direct Work budget`;
+- Earned Work Value is `approved internal line value × reviewed physical progress`;
+- contingency/reserve is excluded from the physical-progress denominator because it is not a work item;
+- Work Outstanding is approved Direct Work less Earned Work Value; it is **not** Cost-to-Complete;
+- Earned Work Value is an internal control measure; it is **not** a client valuation, invoice or receivable;
+- posted project expenses remain Money actuals and are never created or edited by Progress Valuation;
+- Cost-position variance is `Earned Work Value − Actual Spend`;
+- spend ahead of physical progress is a review signal and may reflect advance procurement/mobilisation rather than waste;
+- unclassified actual spend still counts at project level but is not forced into a trade progress row;
+- approved progress snapshots are versioned and the prior approved version is superseded rather than edited in place;
+- V1 blocks a silent reduction below the previous approved line progress; a deliberate correction/reversal requires a later reviewed correction workflow;
+- Progress remains inside each Project workspace, not a separate global App module.
+
+Progress persistence has its own feature gate:
+
+- web/PWA: `PROJECT_PROGRESS_VALUATION_ENABLED`
+- native mobile: `EXPO_PUBLIC_PROJECT_PROGRESS_VALUATION_ENABLED`
+
+These flags additionally require the core project-cost bridge flag. They remain off until the reviewed database drafts are explicitly migrated.
+
 ## Access and live-schema safety
 
 The connected live Accounting Supabase contains real records and is authoritative for current production compatibility.
@@ -188,7 +216,7 @@ The connected live Accounting Supabase contains real records and is authoritativ
 - Do not introduce a duplicate membership truth merely to make newer repository screens compile.
 - Internal budget visibility must respect MD/accountant vs PM access.
 - Project-cost bridge DDL/RPC files remain drafts until the prerequisite live-schema compatibility phases are completed and explicitly approved.
-- Preview/review BOQ, rate and material features do not post to Accounting.
+- Preview/review BOQ, rate, material and progress features do not post to Accounting.
 
 ## Deployment rule
 
