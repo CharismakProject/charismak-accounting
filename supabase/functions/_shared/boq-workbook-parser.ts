@@ -143,7 +143,7 @@ function parseSheet(sheet: ParsedWorkbookSheet, sheetIndex: number, warnings: Bo
   if (!header) return null;
 
   const sections: ImportedBoqSection[] = [];
-  const initialTitle = precedingSectionTitle(sheet.rows, header.rowIndex, header.columns) ?? sheet.name || "General";
+  const initialTitle = precedingSectionTitle(sheet.rows, header.rowIndex, header.columns) ?? (sheet.name || "General");
   let current = makeSection(sheet.name, initialTitle, 0);
   let explicitSectionSeen = initialTitle !== (sheet.name || "General");
   let itemIndex = 0;
