@@ -66,7 +66,13 @@ Deno.serve(async (req: Request) => {
         error: supportOnly
           ? `No primary BOQ sheet was found. ${parsed.supportSheets.length} support/summary sheet${parsed.supportSheets.length === 1 ? " was" : "s were"} identified and deliberately excluded to prevent double counting. Upload the detailed BOQ/bill workbook.`
           : "No BOQ item rows were confidently detected. Check the workbook headings or review the sheet structure.",
-        ...result,
+        warnings: parsed.warnings,
+        recognizedSheets: parsed.recognizedSheets,
+        supportSheets: parsed.supportSheets,
+        legacySheets: parsed.legacySheets,
+        skippedSheets: parsed.skippedSheets,
+        itemCount: 0,
+        reviewSummary: reviewed.reviewSummary,
       });
     }
 
