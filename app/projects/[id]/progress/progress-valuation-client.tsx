@@ -1,0 +1,30 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { buildProgressValuationPosition, type ProgressActualInput, type ProgressBudgetLineInput } from "../../../../lib/project-cost/progress-valuation";
+import { approveProgressValuation } from "./actions";
+
+type InitialLine={budgetLineId:string;progressPercent:number;completedQuantity:number|null};
+const money=(v:number,currency:string)=>new Intl.NumberFormat("en-NG",{style:"currency",currency,maximumFractionDigits:0}).format(v);
+const today=()=>new Date().toISOString().slice(0,10);
+
+export default function ProgressValuationClient({projectId,currency,budgetLines,actuals,initialLines}:{projectId:string;currency:string;budgetLines:ProgressBudgetLineInput[];actuals:ProgressActualInput[];initialLines:InitialLine[]}){
+  const initial=new Map(initialLines.map(x=>[x.budgetLineId,x]));
+  const [entries,setEntries]=useState(()=>Object.fromEntries(budgetLines.map(line=>{const prev=initial.get(line.budgetLineId);return[line.budgetLineId,{progress:String(prev?.progressPercent??0),completed:prev?.completedQuantity==null?"":String(prev.completedQuantity)}]})));
+  const valuationLines=budgetLines.map(line=>{const entry=entries[line.budgetLineId];const completed=entry.completed.trim()===""?null:Number(entry.completed);return{budgetLineId:line.budgetLineId,progressPercent:Number(entry.progress||0),completedQuantity:completed};});
+  const position=useMemo(()=>buildProgressValuationPosition({budgetLines,valuationLines,actuals}),[budgetLines,valuationLines,actuals]);
+  const payload=JSON.stringify(valuationLines.map(line=>({budget_line_id:line.budgetLineId,progress_percent:line.progressPercent,completed_quantity:line.completedQuantity})));
+  return <section className="compact-card" style={{display:"grid",gap:12}}>
+    <div><small style={eye}>NEW REVIEWED VALUATION</small><h2 style={title}>Measure physical work against the approved BOQ</h2><p style={copy}>Enter progress for every approved work line. Where a reliable completed quantity is entered, Charismak derives the percentage from the approved quantity. Progress cannot silently reduce below the last approved valuation.</p></div>
+    <div style={metrics}><Metric label="Preview physical progress" value={`${position.physicalProgressPercent??0}%`}/><Metric label="Earned work value" value={money(position.earnedValue,currency)}/><Metric label="Actual spend" value={money(position.actualCost,currency)}/><Metric label="Cost-position variance" value={money(position.costPositionVariance,currency)}/></div>
+    <form action={approveProgressValuation} style={{display:"grid",gap:12}}>
+      <input type="hidden" name="project_id" value={projectId}/><input type="hidden" name="lines_json" value={payload}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10}}><label style={label}>Valuation date<input name="valuation_date" type="date" required defaultValue={today()} style={input}/></label><label style={label}>Work summary<textarea name="work_summary" rows={2} placeholder="Main work completed / site position" style={input}/></label></div>
+      <div style={{display:"grid",gap:8}}>{budgetLines.map(line=>{const entry=entries[line.budgetLineId];const p=position.lines.find(x=>x.budgetLineId===line.budgetLineId)!;return <article key={line.budgetLineId} style={row}><div style={{minWidth:0,flex:1}}><b style={{fontSize:10,color:"#29475c"}}>{line.costCode} · {line.description}</b><small style={{display:"block",fontSize:8,color:"#84909a",marginTop:3}}>Approved {line.quantity==null?"qty —":`${line.quantity} ${line.unit??""}`} · {money(line.amount,currency)} · earned {money(p.earnedValue,currency)}</small></div><label style={miniLabel}>Progress %<input aria-label={`${line.description} progress percent`} type="number" min="0" max="100" step="0.1" value={entry.progress} onChange={e=>setEntries(current=>({...current,[line.budgetLineId]:{...current[line.budgetLineId],progress:e.target.value,completed:""}}))} style={miniInput}/></label>{line.quantity!=null&&line.quantity>0&&<label style={miniLabel}>Completed {line.unit??"qty"}<input aria-label={`${line.description} completed quantity`} type="number" min="0" max={line.quantity} step="0.001" value={entry.completed} placeholder="Optional" onChange={e=>setEntries(current=>({...current,[line.budgetLineId]:{...current[line.budgetLineId],completed:e.target.value}}))} style={miniInput}/></label>}</article>})}</div>
+      <div style={{background:"#f4f8fa",borderRadius:10,padding:10,fontSize:9,color:"#637b8a",lineHeight:1.5}}>Approval stores a complete versioned snapshot. It does not change the approved budget, create a Money transaction, change Cost-to-Complete, or create a client valuation.</div>
+      <button type="submit" style={{justifySelf:"start"}}>Approve Progress Valuation</button>
+    </form>
+  </section>;
+}
+function Metric({label,value}:{label:string;value:string}){return <div style={{border:"1px solid #dce6ec",borderRadius:10,padding:9,background:"#fff"}}><small style={{fontSize:7,color:"#718391"}}>{label.toUpperCase()}</small><b style={{display:"block",fontSize:12,color:"#173f5a",marginTop:3}}>{value}</b></div>}
+const eye:React.CSSProperties={fontSize:8,fontWeight:900,letterSpacing:".1em",color:"#0b668f"};const title:React.CSSProperties={fontSize:15,color:"#173f5a",margin:"5px 0 8px"};const copy:React.CSSProperties={fontSize:10,lineHeight:1.55,color:"#718391",margin:0};const metrics:React.CSSProperties={display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8};const label:React.CSSProperties={display:"grid",gap:5,fontSize:9,fontWeight:800,color:"#466273"};const input:React.CSSProperties={border:"1px solid #d4e0e7",borderRadius:8,padding:9,font: "inherit",background:"#fff"};const row:React.CSSProperties={display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",border:"1px solid #e0e8ed",borderRadius:11,padding:10};const miniLabel:React.CSSProperties={display:"grid",gap:3,fontSize:7,color:"#718391",minWidth:95};const miniInput:React.CSSProperties={width:110,border:"1px solid #d4e0e7",borderRadius:7,padding:"7px 8px",fontSize:10};
