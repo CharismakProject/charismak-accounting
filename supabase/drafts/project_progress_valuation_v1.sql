@@ -1,7 +1,7 @@
 -- DRAFT ONLY — DO NOT APPLY WITHOUT EXPLICIT REVIEW.
 -- Prerequisite: project-cost bridge V1.
 -- Progress Valuation records physical completion against the approved internal BOQ/budget.
--- It never creates/updates Money transactions, commitments, forecasts, invoices or client receivables.
+-- It never creates or updates Money transactions, commitments, forecasts or client billing records.
 
 create table if not exists public.project_progress_valuations (
   id uuid primary key default gen_random_uuid(),
@@ -65,12 +65,13 @@ language plpgsql security definer set search_path=''
 as $$
 declare
   actor uuid := auth.uid();
-  company uuid; budget uuid; direct_cost numeric; new_version integer; new_valuation uuid; previous_valuation uuid;
+  company uuid; budget uuid; direct_cost numeric; new_version integer; new_valuation uuid; previous_valuation uuid; previous_valuation_date date;
   budget_count integer; submitted_count integer; duplicate_count integer;
   b record; submitted jsonb; p numeric; completed numeric; prior_progress numeric; earned numeric; total_earned numeric := 0;
 begin
   if actor is null then raise exception 'Authentication required'; end if;
   if valuation_date_value is null then raise exception 'Valuation date is required'; end if;
+  if valuation_date_value > current_date then raise exception 'Valuation date cannot be in the future'; end if;
   if jsonb_typeof(valuation_lines) <> 'array' then raise exception 'Valuation lines must be an array'; end if;
   if length(coalesce(work_summary_value,'')) > 3000 then raise exception 'Progress summary is too long'; end if;
 
@@ -87,8 +88,13 @@ begin
   if duplicate_count>0 then raise exception 'Duplicate progress budget lines are not allowed'; end if;
   if submitted_count<>budget_count then raise exception 'A progress valuation must contain every approved budget line'; end if;
 
-  select id into previous_valuation from public.project_progress_valuations where project_id=target_project_id and status='approved' for update;
+  select id,valuation_date into previous_valuation,previous_valuation_date from public.project_progress_valuations where project_id=target_project_id and status='approved' for update;
+  if previous_valuation_date is not null and valuation_date_value < previous_valuation_date then raise exception 'Valuation date cannot be earlier than the current approved valuation date %',previous_valuation_date; end if;
   select coalesce(max(valuation_version),0)+1 into new_version from public.project_progress_valuations where project_id=target_project_id;
+
+  -- Supersede inside the same database transaction before inserting the next approved row.
+  -- Any later validation/insert failure rolls this change back atomically.
+  if previous_valuation is not null then update public.project_progress_valuations set status='superseded',superseded_at=now() where id=previous_valuation; end if;
   insert into public.project_progress_valuations(company_id,project_id,budget_id,valuation_version,valuation_date,status,physical_progress_percent,earned_value,work_summary,created_by,approved_by)
   values(company,target_project_id,budget,new_version,valuation_date_value,'approved',0,0,nullif(trim(work_summary_value),''),actor,actor)
   returning id into new_valuation;
@@ -117,7 +123,6 @@ begin
   end loop;
 
   update public.project_progress_valuations set earned_value=round(total_earned,2),physical_progress_percent=case when direct_cost>0 then round(total_earned/direct_cost*100,4) else 0 end where id=new_valuation;
-  if previous_valuation is not null then update public.project_progress_valuations set status='superseded',superseded_at=now() where id=previous_valuation; end if;
   return new_valuation;
 end;
 $$;
