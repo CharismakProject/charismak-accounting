@@ -73,6 +73,9 @@ export function buildProjectCreationPreview(input: {
   if (summary.unpricedItems > 0) {
     issues.push(`${summary.unpricedItems} BOQ item${summary.unpricedItems === 1 ? " is" : "s are"} still unpriced.`);
   }
+  if (summary.arithmeticMismatchItems > 0) {
+    issues.push(`${summary.arithmeticMismatchItems} imported BOQ item${summary.arithmeticMismatchItems === 1 ? " has" : "s have"} a source Amount that does not equal Qty × imported Rate. Review and explicitly confirm/change the working rate before Project staging.`);
+  }
 
   const budgetLines: ProjectBudgetLinePreview[] = [];
   let clientSuppliedExcludedValue = 0;
