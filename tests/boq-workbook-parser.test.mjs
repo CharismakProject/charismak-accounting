@@ -28,6 +28,45 @@ test("parses S/N Description Qty Unit Rate Amount and preserves section headings
   assert.equal(result.boq.sections[1].items[0].materialBreakdown.status, "needs_review");
 });
 
+test("real hospitality BOQ keeps measured total descriptions and ignores narrative headings", () => {
+  const result = parseBoqWorkbookSheets([{
+    name: "Bill of Quantities",
+    rows: [
+      ["ELEMENT NO. 1 - SCREEDS AND FLOOR PREPARATION"],
+      ["INFORMATION"],
+      ["M10: SAND CEMENT SCREEDS/TOPPINGS"],
+      ["No", "Item Description", "Qty", "Unit", "Rate (₦)", "Amount (₦)"],
+      ["A", "10mm levelling screed to floors", 35, "m2", 3550, 124250],
+      ["ELEMENT NO. 9 - CEILING FINISHES"],
+      ["INFORMATION"],
+      ["CF01: GYPSUM BOARD"],
+      ["gypsum board fixed using aluminum profiles at 60cm spacing minimum; rate to include materials, joint tape, labour and transport"],
+      ["No", "Item Description", "Qty", "Unit", "Rate (₦)", "Amount (₦)"],
+      ["A", "indoor flat surface area to be covered", 373, "m2", 13500, 5035500],
+      ["CF04: PAINTING"],
+      ["allow budget for screeding and painting; apply primer and two coats after preparation"],
+      ["No", "Item Description", "Qty", "Unit", "Rate (₦)", "Amount (₦)"],
+      ["R", "total paint area:", 414, "m2", 6500, 2691000],
+      ["PAINT — CARRIED TO SUMMARY", "", "", "", "", 2691000],
+      ["GRAND TOTAL — BILL NR. 1 + BILL NR. 9", "", "", "", "", 22214355],
+    ],
+  }], "Sora Restaurant BOQ.xlsx");
+
+  assert.equal(result.itemCount, 3);
+  assert.deepEqual(result.boq.sections.map((section) => section.title), [
+    "M10: SAND CEMENT SCREEDS/TOPPINGS",
+    "CF01: GYPSUM BOARD",
+    "CF04: PAINTING",
+  ]);
+  const paint = result.boq.sections[2].items[0];
+  assert.equal(paint.itemNo, "R");
+  assert.equal(paint.description, "total paint area:");
+  assert.equal(paint.quantity, 414);
+  assert.equal(paint.amount, 2691000);
+  assert.ok(result.boq.sections.every((section) => !/gypsum board fixed using/i.test(section.title)));
+  assert.ok(result.boq.sections.every((section) => !/allow budget for screeding/i.test(section.title)));
+});
+
 test("accepts reordered alternate headings and unpriced BOQ", () => {
   const result = parseBoqWorkbookSheets([{
     name: "Roofing",
