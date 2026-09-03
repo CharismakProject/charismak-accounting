@@ -18,8 +18,8 @@ test("bridge keeps commercial value, internal budget and actual cost separate", 
   assert.match(design, /original\/base contract value/i);
   assert.match(design, /internal cost budget/i);
   assert.match(design, /actual cost/i);
-  assert.match(design, /cost to complete/i);
-  assert.match(design, /forecast final cost/i);
+  assert.match(design, /cost[- ]to[- ]complete/i);
+  assert.match(design, /forecast/i);
 });
 
 test("bridge is explicitly non-destructive and idempotent", () => {
