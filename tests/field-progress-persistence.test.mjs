@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import test from "node:test";
+const sql=fs.readFileSync(new URL("../supabase/drafts/project_progress_field_review_v1.sql",import.meta.url),"utf8");
+
+test("PM submission tables are read-only to authenticated clients",()=>{assert.match(sql,/revoke all on table public\.project_progress_field_submissions from anon,authenticated/i);assert.match(sql,/grant select on table public\.project_progress_field_submissions to authenticated/i);assert.match(sql,/revoke all on table public\.project_progress_field_submission_lines from anon,authenticated/i);});
+test("PM safe work-item RPC does not return internal rate or amount",()=>{const block=sql.match(/create or replace function private\.get_project_progress_work_items_v1[\s\S]*?\$\$;/i)?.[0]??"";assert.match(block,/approved_quantity/i);assert.doesNotMatch(block,/returns table\([\s\S]*\brate\b/i);assert.doesNotMatch(block,/returns table\([\s\S]*\bamount\b/i);});
+test("only active assigned PM can submit field progress",()=>{assert.match(sql,/is_active_assigned_project_pm[\s\S]*project_assignments[\s\S]*unassigned_at is null/i);assert.match(sql,/Only an active assigned PM can submit field progress/i);});
+test("submission requires complete BOQ snapshot and evidence",()=>{assert.match(sql,/submitted_count<>budget_count[\s\S]*every approved work item/i);assert.match(sql,/evidence_count<1 or evidence_count>8/i);assert.match(sql,/image\/jpeg[\s\S]*application\/pdf/i);});
+test("only MD review approval calls authoritative Progress Valuation",()=>{assert.match(sql,/Only MD can review PM field progress/i);assert.match(sql,/decision_value='approve'[\s\S]*private\.approve_project_progress_valuation_v1/i);assert.match(sql,/changes_requested[\s\S]*declined/i);});
+test("field review draft never posts Money, commitments, forecast or billing",()=>{assert.doesNotMatch(sql,/insert\s+into\s+public\.transactions/i);assert.doesNotMatch(sql,/update\s+public\.transactions/i);assert.doesNotMatch(sql,/insert\s+into\s+public\.project_cost_commitments/i);assert.doesNotMatch(sql,/insert\s+into\s+public\.project_cost_forecasts/i);assert.doesNotMatch(sql,/insert\s+into\s+public\.journal_/i);});
+test("evidence bucket is private and bounded",()=>{assert.match(sql,/project-progress-evidence','project-progress-evidence',false,10485760/i);assert.match(sql,/project_progress_evidence_delete_unsubmitted_pm/i);assert.match(sql,/not exists\(select 1 from public\.project_progress_field_evidence/i);});
