@@ -72,8 +72,7 @@ create index if not exists project_progress_field_evidence_submission_idx on pub
 create or replace function private.is_active_assigned_project_pm(target_project_id uuid,target_user_id uuid default auth.uid())
 returns boolean language sql stable security definer set search_path='' as $$
   select target_user_id is not null and exists(
-    select 1
-    from public.projects p
+    select 1 from public.projects p
     join public.company_members m on m.company_id=p.company_id and m.user_id=target_user_id and m.status='active' and m.role='pm'
     join public.project_assignments a on a.project_id=p.id and a.company_member_id=m.id and a.unassigned_at is null
     where p.id=target_project_id
@@ -88,7 +87,7 @@ returns boolean language sql stable security definer set search_path='' as $$
     select 1 from public.project_progress_field_submissions s
     where s.id=target_submission_id and (
       s.submitted_by=target_user_id
-      or private.has_company_role(s.company_id,array['md']::company_role[])
+      or private.has_company_role(s.company_id,array['md']::public.company_role[])
     )
   );
 $$;
@@ -110,7 +109,7 @@ grant all privileges on table public.project_progress_field_evidence to service_
 
 drop policy if exists project_progress_field_submissions_read on public.project_progress_field_submissions;
 create policy project_progress_field_submissions_read on public.project_progress_field_submissions for select to authenticated
-using(submitted_by=(select auth.uid()) or (select private.has_company_role(company_id,array['md']::company_role[])));
+using(submitted_by=(select auth.uid()) or (select private.has_company_role(company_id,array['md']::public.company_role[])));
 drop policy if exists project_progress_field_lines_read on public.project_progress_field_submission_lines;
 create policy project_progress_field_lines_read on public.project_progress_field_submission_lines for select to authenticated
 using((select private.can_read_field_progress_submission(submission_id)));
@@ -135,7 +134,7 @@ using(
     or exists(
       select 1 from public.projects p
       where p.id=split_part(name,'/',1)::uuid
-        and (select private.has_company_role(p.company_id,array['md']::company_role[]))
+        and (select private.has_company_role(p.company_id,array['md']::public.company_role[]))
     )
   )
 );
@@ -166,7 +165,7 @@ begin
   if actor is null then raise exception 'Authentication required'; end if;
   select p.company_id into company from public.projects p where p.id=target_project_id;
   if company is null then raise exception 'Project not found'; end if;
-  if not private.is_active_assigned_project_pm(target_project_id,actor) and not private.has_company_role(company,array['md']::company_role[]) then raise exception 'Project progress access denied'; end if;
+  if not private.is_active_assigned_project_pm(target_project_id,actor) and not private.has_company_role(company,array['md']::public.company_role[]) then raise exception 'Project progress access denied'; end if;
   select b.id into budget from public.project_cost_budgets b where b.project_id=target_project_id and b.status='approved';
   if budget is null then raise exception 'Approved Budget Baseline is required'; end if;
   select v.id into latest from public.project_progress_valuations v where v.project_id=target_project_id and v.status='approved';
@@ -282,7 +281,7 @@ begin
   if decision_value not in ('approve','changes_requested','decline') then raise exception 'Invalid field progress review decision'; end if;
   select * into s from public.project_progress_field_submissions where id=target_submission_id for update;
   if s.id is null then raise exception 'Field progress submission not found'; end if;
-  if not private.has_company_role(s.company_id,array['md']::company_role[]) then raise exception 'Only MD can review PM field progress'; end if;
+  if not private.has_company_role(s.company_id,array['md']::public.company_role[]) then raise exception 'Only MD can review PM field progress'; end if;
   if s.status<>'submitted' then raise exception 'This field progress submission has already been reviewed'; end if;
   if decision_value<>'approve' and length(trim(coalesce(review_notes_value,'')))<3 then raise exception 'Review notes are required when requesting changes or declining'; end if;
   select b.id into current_budget from public.project_cost_budgets b where b.project_id=s.project_id and b.status='approved';
