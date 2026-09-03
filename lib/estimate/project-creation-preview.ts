@@ -1,7 +1,7 @@
-import type { EstimateSummary } from "./estimate-summary";
-import type { ReviewedBoqDecisionMap } from "./review-decision";
-import { isValidCostCode, type CostCode } from "../project-cost/cost-codes";
-import type { BoqSupplyResponsibility, SectionedBoq } from "./sectioned-boq";
+import type { EstimateSummary } from "./estimate-summary.ts";
+import type { ReviewedBoqDecisionMap } from "./review-decision.ts";
+import { isValidCostCode, type CostCode } from "../project-cost/cost-codes.ts";
+import type { BoqSupplyResponsibility, SectionedBoq } from "./sectioned-boq.ts";
 
 export type InternalBudgetBasis = "direct_cost" | "direct_plus_contingency" | "explicit";
 export type ContractValueBasis = "grand_total" | "subtotal_before_tax" | "explicit" | "none";
