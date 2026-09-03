@@ -1,13 +1,20 @@
 import Link from "next/link";
 
-const entries = [
+type EstimateEntry = {
+  title: string;
+  note: string;
+  href?: string;
+  action?: string;
+};
+
+const entries: EstimateEntry[] = [
   { title:"Quick Estimate", note:"Fast preliminary cost for early decisions." },
   { title:"Build Estimate", note:"Guided dimensions and questions for a fuller building estimate." },
   { title:"Upload BOQ", note:"Bring an existing priced or unpriced BOQ for pricing, materials and review.", href:"/estimate/upload-boq", action:"Upload Excel BOQ" },
   { title:"Upload Drawing", note:"AI-assisted interpretation with user verification before quantities are accepted." },
   { title:"Enter Quantities", note:"Direct measured-quantity entry for QSs and experienced contractors." },
   { title:"BOQ Studio", note:"Create, edit, price and prepare a sectioned BOQ for project conversion.", href:"/estimate/boq", action:"Open BOQ Studio" },
-] as const;
+];
 
 export default function EstimateHome(){
   return <main className="page-canvas">
