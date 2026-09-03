@@ -1,5 +1,5 @@
-import { getCostCodeGroup, type CostCode } from "../project-cost/cost-codes";
-import type { ProjectCreationPreview } from "./project-creation-preview";
+import { getCostCodeGroup, type CostCode } from "../project-cost/cost-codes.ts";
+import type { ProjectCreationPreview } from "./project-creation-preview.ts";
 
 export type StagedCostGroup = { costCode: CostCode; name: string; amount: number; lineCount: number };
 export type StagedProjectWorkspace = {
