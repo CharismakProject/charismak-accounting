@@ -42,8 +42,22 @@ test("native PM route uses only safe progress RPC and private evidence bucket",(
   assert.doesNotMatch(source,/project_cost_budget_lines/);
 });
 
-test("native Project workspace exposes Field Report entry",()=>{
+test("native MD route alone can load financial impact and review the field submission",()=>{
+  const source=readFileSync(new URL("../mobile/app/project-field-review/[id].tsx",import.meta.url),"utf8");
+  assert.match(source,/EXPO_PUBLIC_PROJECT_PROGRESS_FIELD_REVIEW_ENABLED/);
+  assert.match(source,/String\(member\?\.role\?\?""\)!=="md"/);
+  assert.match(source,/\.from\("project_cost_budget_lines"\)/);
+  assert.match(source,/\.from\("transactions"\)/);
+  assert.match(source,/review_project_field_progress_v1/);
+  assert.match(source,/Approve Progress/);
+  assert.match(source,/Request Changes/);
+  assert.match(source,/Decline/);
+});
+
+test("native Project workspace exposes PM submission and MD review entries",()=>{
   const project=readFileSync(new URL("../mobile/app/project/[id].tsx",import.meta.url),"utf8");
   assert.match(project,/project-field-progress/);
   assert.match(project,/Field Report/);
+  assert.match(project,/project-field-review/);
+  assert.match(project,/MD Field Review/);
 });
