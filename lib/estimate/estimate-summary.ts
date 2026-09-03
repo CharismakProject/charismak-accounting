@@ -155,7 +155,8 @@ export function buildEstimatePrintHtml(input: { boq: SectionedBoq; summary: Esti
 function xmlCell(value: unknown, type: "String" | "Number" = "String") {
   return `<Cell><Data ss:Type="${type}">${escXml(value)}</Data></Cell>`;
 }
-function xmlRow(values: Array<[unknown, "String" | "Number"?]>) {
+type XmlCellTuple = [unknown, ("String" | "Number")?];
+function xmlRow(values: XmlCellTuple[]) {
   return `<Row>${values.map(([value, type]) => xmlCell(value, type ?? "String")).join("")}</Row>`;
 }
 
@@ -164,7 +165,7 @@ export function buildEstimateSpreadsheetXml(input: { boq: SectionedBoq; summary:
   const summaryRows = [
     ["Estimate", boq.name], ["Currency", summary.currency], ["Direct Cost", summary.directCost], ["Contingency %", summary.settings.contingencyPercent], ["Contingency", summary.contingency], ["Overhead %", summary.settings.overheadPercent], ["Overhead", summary.overhead], ["Profit %", summary.settings.profitPercent], ["Profit", summary.profit], ["Discount %", summary.settings.discountPercent], ["Discount", summary.discount], ["Subtotal Before Tax", summary.subtotalBeforeTax], ["Tax / VAT %", summary.settings.taxPercent], ["Tax / VAT", summary.tax], ["Grand Total", summary.grandTotal], ["Unpriced Items", summary.unpricedItems],
   ].map(([label, value]) => xmlRow([[label], [value, typeof value === "number" ? "Number" : "String"]])).join("");
-  const boqRows = [xmlRow([["Section"], ["Item No"], ["Description"], ["Quantity"], ["Unit"], ["Working Rate"], ["Rate Source"], ["Amount"]]), ...summary.lines.map(line => xmlRow([[line.sectionTitle], [line.itemNo ?? ""], [line.description], [line.quantity, "Number"], [line.unit], [line.workingRate ?? "" , line.workingRate == null ? "String" : "Number"], [line.workingRateSource ?? ""], [line.amount ?? "", line.amount == null ? "String" : "Number"]]))].join("");
+  const boqRows = [xmlRow([["Section"], ["Item No"], ["Description"], ["Quantity"], ["Unit"], ["Working Rate"], ["Rate Source"], ["Amount"]]), ...summary.lines.map(line => xmlRow([[line.sectionTitle], [line.itemNo ?? ""], [line.description], [line.quantity, "Number"], [line.unit], [line.workingRate ?? "", line.workingRate == null ? "String" : "Number"], [line.workingRateSource ?? ""], [line.amount ?? "", line.amount == null ? "String" : "Number"]]))].join("");
   const materialRows = [xmlRow([["Material"], ["Unit"], ["Quantity"], ["BOQ Source Count"]]), ...summary.materials.map(row => xmlRow([[row.material], [row.unit], [row.quantity, "Number"], [row.sourceItems.length, "Number"]]))].join("");
   return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Estimate Summary"><Table>${summaryRows}</Table></Worksheet><Worksheet ss:Name="Priced BOQ"><Table>${boqRows}</Table></Worksheet><Worksheet ss:Name="Materials"><Table>${materialRows}</Table></Worksheet></Workbook>`;
 }
