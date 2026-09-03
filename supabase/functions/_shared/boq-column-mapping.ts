@@ -65,7 +65,16 @@ export function mapBoqHeaderRow(row: unknown[]): BoqColumnMap {
   const mapped: BoqColumnMap = {};
   row.forEach((cell, index) => {
     const key = matchBoqColumnHeader(cell);
-    if (key && mapped[key] === undefined) mapped[key] = index;
+    if (!key) return;
+
+    // Some professional bills carry a base/tender RATE followed by a reviewed/current RATE.
+    // The amount normally belongs to the rightmost commercial rate. Keep the first identity /
+    // measurement columns, but deliberately prefer the rightmost duplicate Rate or Amount.
+    if (key === "rate" || key === "amount") {
+      mapped[key] = index;
+      return;
+    }
+    if (mapped[key] === undefined) mapped[key] = index;
   });
   return mapped;
 }
