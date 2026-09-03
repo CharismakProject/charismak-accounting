@@ -1,4 +1,5 @@
 export type MobileEstimateSupply="contractor"|"client"|"specialist"|"labour_only"|"unknown";
+export type MobileWorkingRateSource="imported"|"manual";
 
 export type MobileEstimateDecision={
   costCode:string;
@@ -29,4 +30,5 @@ export type MobileEstimateReviewSession={
   boq:MobileEstimateBoq;
   decisions:Record<string,MobileEstimateDecision>;
   rates:Record<string,string>;
+  rateSources?:Record<string,MobileWorkingRateSource>;
 };
