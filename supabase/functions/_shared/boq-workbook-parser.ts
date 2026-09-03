@@ -41,7 +41,9 @@ export type ParsedBoqWorkbook = {
 };
 
 const summaryPattern = /^(sub\s*total|subtotal|total|grand\s*total|bill\s*total|carried\s+(to|forward)|brought\s+forward|collection|summary|page\s*total)\b/i;
-const notePattern = /^(note|notes|description shall|all rates|rates shall|contractor shall|the contractor|allow for)\b/i;
+const carriedSummaryPattern = /\b(carried\s+to\s+summary|bill\s*(nr\.?|no\.?|number)?\s*\d*\s*total|grand\s+total)\b/i;
+const notePattern = /^(note|notes|information|description shall|all rates|rates shall|contractor shall|the contractor|allow for)\b/i;
+const namedTradePattern = /^(preliminaries|substructure|superstructure|concrete|reinforcement|formwork|blockwork|masonry|structural steel|roofing|doors?|windows?|glazing|plastering|screeding|floor finishes?|wall finishes?|ceilings?|ceiling finishes?|painting|decoration|joinery|plumbing|sanitary|electrical|mechanical|hvac|external works?)\b/i;
 
 function text(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -87,20 +89,39 @@ function isRepeatedHeader(row: unknown[]): boolean {
   return mapped.description !== undefined && keys.length >= 3;
 }
 
+function isStrongSectionTitle(title: string): boolean {
+  const value = title.trim();
+  if (!value || value.length > 140 || notePattern.test(value) || summaryPattern.test(value) || carriedSummaryPattern.test(value)) return false;
+  if (/^(section|bill|element)\s*(nr\.?|no\.?|number)?\s*[A-Z0-9]/i.test(value)) return true;
+  if (/^(cf|m|k|l|p|q|r|s|t)\d{1,3}\s*[:.\-–—]/i.test(value)) return true;
+  if (namedTradePattern.test(value)) return true;
+  const letters = value.replace(/[^A-Za-z]/g, "");
+  if (letters.length >= 3 && value === value.toUpperCase() && value.length <= 90) return true;
+  return false;
+}
+
 function likelySection(row: unknown[], columns: BoqColumnMap): string | null {
   const values = nonEmpty(row);
   if (!values.length || values.length > 3) return null;
   const title = text(cell(row, columns.description)) || values[0];
-  if (!title || title.length < 2 || summaryPattern.test(title) || notePattern.test(title)) return null;
+  if (!isStrongSectionTitle(title)) return null;
 
   const qty = number(cell(row, columns.quantity));
   const rate = number(cell(row, columns.rate));
   const amount = number(cell(row, columns.amount));
   const unit = text(cell(row, columns.unit));
   if (qty !== null || rate !== null || amount !== null || unit) return null;
-
-  // A short text-only row in or near the description column is treated as a section heading.
   return title;
+}
+
+function precedingSectionTitle(rows: unknown[][], headerRowIndex: number, columns: BoqColumnMap): string | null {
+  const start = Math.max(0, headerRowIndex - 12);
+  for (let r = headerRowIndex - 1; r >= start; r--) {
+    const row = rows[r] ?? [];
+    const candidate = likelySection(row, columns);
+    if (candidate) return candidate;
+  }
+  return null;
 }
 
 function safeId(value: string): string {
@@ -122,8 +143,9 @@ function parseSheet(sheet: ParsedWorkbookSheet, sheetIndex: number, warnings: Bo
   if (!header) return null;
 
   const sections: ImportedBoqSection[] = [];
-  let current = makeSection(sheet.name, sheet.name || "General", 0);
-  let explicitSectionSeen = false;
+  const initialTitle = precedingSectionTitle(sheet.rows, header.rowIndex, header.columns) ?? sheet.name || "General";
+  let current = makeSection(sheet.name, initialTitle, 0);
+  let explicitSectionSeen = initialTitle !== (sheet.name || "General");
   let itemIndex = 0;
 
   for (let r = header.rowIndex + 1; r < sheet.rows.length; r++) {
@@ -147,8 +169,9 @@ function parseSheet(sheet: ParsedWorkbookSheet, sheetIndex: number, warnings: Bo
     const rate = number(cell(row, header.columns.rate));
     const amountRaw = number(cell(row, header.columns.amount));
     const combined = description || values.join(" ");
+    const hasMeasuredIdentity = Boolean(description) && (qtyRaw !== null || Boolean(unitRaw) || rate !== null || Boolean(serial));
 
-    if (summaryPattern.test(combined)) continue;
+    if ((summaryPattern.test(combined) || carriedSummaryPattern.test(combined)) && !hasMeasuredIdentity) continue;
     if (!description) {
       if (!notePattern.test(combined)) warnings.push({ sheet: sheet.name, row: r + 1, message: "Row has content but no recognized description; kept out of the BOQ pending review." });
       continue;
@@ -202,7 +225,6 @@ function parseSheet(sheet: ParsedWorkbookSheet, sheetIndex: number, warnings: Bo
   if (current.items.length) sections.push(current);
   if (!sections.length) return null;
 
-  // If no explicit section heading was found, the worksheet itself is the section.
   if (!explicitSectionSeen && sections.length === 1) sections[0].title = sheet.name || "General";
   return sections;
 }
