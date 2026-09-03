@@ -20,6 +20,8 @@ type ParseResult = {
   boq?: SectionedBoq;
   warnings?: Warning[];
   recognizedSheets?: string[];
+  supportSheets?: string[];
+  legacySheets?: string[];
   skippedSheets?: string[];
   itemCount?: number;
   reviewSummary?: { clearItems: number; attentionItems: number; totalItems: number };
@@ -57,7 +59,7 @@ export default function UploadBoqClient({ companyId, companyName }: { companyId:
     try{
       const {error:uploadError}=await supabase.storage.from("universal-intake").upload(storagePath,file,{contentType:file.type||undefined,upsert:false});
       if(uploadError)throw new Error(uploadError.message);
-      setMessage("Detecting sheets, headings, sections, BOQ items and review suggestions…");
+      setMessage("Detecting primary bill sheets, support schedules, headings, sections and BOQ items…");
       const {data,error}=await supabase.functions.invoke("parse-boq-workbook",{body:{bucket:"universal-intake",storagePath,fileName:file.name}});
       if(error)throw new Error(error.message||"BOQ parser could not run.");
       const parsed=data as ParseResult;
@@ -65,7 +67,7 @@ export default function UploadBoqClient({ companyId, companyName }: { companyId:
       setResult(parsed);
       setMaterializedBoq(parsed.boq??null);
       if(parsed.boq)setWorkingRates(initialWorkingRates(parsed.boq));
-      setMessage(parsed.itemCount?`${parsed.itemCount} BOQ item${parsed.itemCount===1?"":"s"} detected. Review meaning and rates, calculate materials, then prepare the estimate summary and project stage.`:"No BOQ items were detected.");
+      setMessage(parsed.itemCount?`${parsed.itemCount} primary BOQ item${parsed.itemCount===1?"":"s"} detected. Review meaning and rates, calculate materials, then prepare the estimate summary and project stage.`:"No primary BOQ items were detected.");
     }catch(error){
       setMessage(error instanceof Error?error.message:"Could not parse this BOQ.");
     }finally{
@@ -80,7 +82,7 @@ export default function UploadBoqClient({ companyId, companyName }: { companyId:
       <header className="page-heading compact">
         <p className="page-eyebrow">EXCEL BOQ IMPORT</p>
         <h1>Upload the BOQ you already use</h1>
-        <p>Charismak detects common heading variations and column orders, keeps the bill sectioned, and lets you review meaning, rates, material quantities and commercial adjustments before anything becomes a project budget.</p>
+        <p>Charismak separates primary bill tabs from summaries, procurement and calculation schedules, keeps the bill sectioned, and lets you review meaning, rates, material quantities and commercial adjustments before anything becomes a project budget.</p>
       </header>
 
       <section className="data-card" style={{padding:18,display:"grid",gap:13}}>
@@ -92,7 +94,7 @@ export default function UploadBoqClient({ companyId, companyName }: { companyId:
           </label>
           <button type="button" onClick={parse} disabled={!file||busy||Boolean(message&&file&&file.size>MAX_BYTES)} className="primary-link-button" style={{border:0,cursor:"pointer",opacity:!file||busy?.6:1}}>{busy?"Reading BOQ…":"Read BOQ"}</button>
         </div>
-        <div style={{fontSize:11,lineHeight:1.55,color:"#667b8b"}}><b>Accepted examples:</b> S/N · Description · Qty · Unit · Rate · Amount; Item No · Particulars · UOM · Quantity · Unit Price · Total Amount; and unpriced BOQs without Rate/Amount.</div>
+        <div style={{fontSize:11,lineHeight:1.55,color:"#667b8b"}}><b>Accepted examples:</b> S/N · Description · Qty · Unit · Rate · Amount; Section · Item No · Description · Unit · Qty · Rate · Amount; unpriced BOQs; and older preliminaries layouts that can be conservatively recovered for review.</div>
         {message&&<div style={{borderRadius:10,padding:"10px 12px",background:result?.boq?"#edf8f3":"#fff7df",fontSize:11,color:result?.boq?"#176247":"#775c18"}}>{message}</div>}
       </section>
 
@@ -100,12 +102,15 @@ export default function UploadBoqClient({ companyId, companyName }: { companyId:
         <section className="data-card" style={{marginTop:14,padding:16,display:"grid",gap:8}}>
           <small style={{fontSize:9,fontWeight:900,letterSpacing:".1em",color:"#16825c"}}>IMPORT REVIEW</small>
           <div style={{display:"flex",flexWrap:"wrap",gap:8,fontSize:11,color:"#5f7484"}}>
-            <span><b>{result.recognizedSheets?.length??0}</b> recognized sheet(s)</span><span>·</span>
+            <span><b>{result.recognizedSheets?.length??0}</b> primary bill sheet(s)</span><span>·</span>
             <span><b>{result.boq.sections.length}</b> section(s)</span><span>·</span>
             <span><b>{result.itemCount??0}</b> item(s)</span>
+            {(result.legacySheets?.length??0)>0&&<><span>·</span><span><b>{result.legacySheets!.length}</b> legacy sheet(s) inferred</span></>}
+            {(result.supportSheets?.length??0)>0&&<><span>·</span><span><b>{result.supportSheets!.length}</b> support sheet(s) skipped</span></>}
             {result.reviewSummary&&<><span>·</span><span><b>{result.reviewSummary.clearItems}</b> clear suggestion(s)</span><span>·</span><span><b>{result.reviewSummary.attentionItems}</b> need attention</span></>}
-            {(result.skippedSheets?.length??0)>0&&<><span>·</span><span><b>{result.skippedSheets!.length}</b> non-BOQ sheet(s) skipped</span></>}
           </div>
+          {(result.supportSheets?.length??0)>0&&<p style={{margin:0,fontSize:10,lineHeight:1.5,color:"#718391"}}><b>Skipped as support:</b> {result.supportSheets!.join(" · ")}. These tabs stay outside the BOQ total to prevent double counting.</p>}
+          {(result.legacySheets?.length??0)>0&&<p style={{margin:0,fontSize:10,lineHeight:1.5,color:"#8a6514"}}><b>Legacy layout:</b> {result.legacySheets!.join(" · ")} was recovered conservatively and requires line-by-line review before Project staging.</p>}
           <p style={{margin:0,fontSize:11,lineHeight:1.55,color:"#6b7f8e"}}>Review order: meaning → working rates → material quantities → commercial summary → project staging. None of these review screens posts to Accounting.</p>
         </section>
 
