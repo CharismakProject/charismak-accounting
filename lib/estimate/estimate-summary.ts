@@ -1,5 +1,5 @@
-import type { MaterialSummaryRow, SectionedBoq } from "./sectioned-boq";
-import { summarizeMaterials } from "./sectioned-boq";
+import type { MaterialSummaryRow, SectionedBoq } from "./sectioned-boq.ts";
+import { summarizeMaterials } from "./sectioned-boq.ts";
 
 export type WorkingRateSource = "imported" | "manual" | "reference" | null;
 export type WorkingRateDecision = { rate: number | null; source: WorkingRateSource };
