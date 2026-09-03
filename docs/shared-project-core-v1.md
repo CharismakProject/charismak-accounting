@@ -29,7 +29,7 @@ Keep these concepts separate:
 - unpaid commitments
 - profit/deficit
 
-Profit, VAT and commercial markups must never silently become internal project cost.
+Profit, VAT and commercial markups must never silently become internal project cost. The original/base contract value remains a commercial snapshot and must not be substituted for the internal cost budget.
 
 ## BOQ V1 structure
 
@@ -165,6 +165,8 @@ This traceability must survive later persistence/export work.
 
 A reviewed estimate may later create or update a Project cost baseline, but this is a deliberate user action. The persistence bridge must remain versioned, idempotent and review-first.
 
+A repeated source estimate/project import must not create a duplicate Accounting project; the source link and reviewed fingerprint are the idempotency authority.
+
 A source estimate/BOQ should not automatically create transactions or actual spend.
 
 ## Budget vs Actual
@@ -208,15 +210,41 @@ Progress persistence has its own feature gate:
 
 These flags additionally require the core project-cost bridge flag. They remain off until the reviewed database drafts are explicitly migrated.
 
+## PM Field Progress → MD Review V1
+
+An assigned Project Manager may submit an evidence-backed field report, but a PM submission is **not authoritative project progress** until MD approval.
+
+Rules:
+
+- only an active PM assignment for that Project can submit a field report;
+- PM access is deliberately non-financial: the PM receives work description, cost group, unit, approved quantity, prior approved progress and prior completed quantity only;
+- PM screens must not expose internal rate, budget amount, Earned Work Value, profit, forecast or Money transactions;
+- the report contains the complete approved work-item snapshot, so unchanged items carry the last approved progress rather than disappearing from the valuation basis;
+- completed quantities cannot exceed the approved BOQ quantity and reported progress cannot silently reduce below the last approved position;
+- each report requires 1–8 site photos or PDFs; JPG, PNG, WebP and PDF are accepted, maximum 10 MB per file;
+- evidence belongs to a private project-progress bucket and is attached to the field submission, not to Money or the BOQ baseline;
+- only MD may Approve, Request Changes or Decline a submitted PM field report;
+- Request Changes and Decline never alter authoritative Progress Valuation;
+- MD approval reuses the authoritative Progress Valuation RPC in the same database transaction, so there is no second progress truth;
+- if the approved Budget Baseline changes after the PM submits, the pending report cannot be approved and a fresh report is required;
+- PM reports and MD decisions remain versioned/auditable;
+- evidence URLs are private/signed for authorized review rather than public files.
+
+Field review has a separate feature gate and also requires both project-cost core and Progress Valuation:
+
+- web/PWA: `PROJECT_PROGRESS_FIELD_REVIEW_ENABLED`
+- native mobile: `EXPO_PUBLIC_PROJECT_PROGRESS_FIELD_REVIEW_ENABLED`
+
 ## Access and live-schema safety
 
 The connected live Accounting Supabase contains real records and is authoritative for current production compatibility.
 
 - `company_members` remains the canonical live membership model.
+- `project_assignments` remains the authority for whether a PM currently has access to a Project.
 - Do not introduce a duplicate membership truth merely to make newer repository screens compile.
 - Internal budget visibility must respect MD/accountant vs PM access.
 - Project-cost bridge DDL/RPC files remain drafts until the prerequisite live-schema compatibility phases are completed and explicitly approved.
-- Preview/review BOQ, rate, material and progress features do not post to Accounting.
+- Preview/review BOQ, rate, material, progress and PM field-review features do not post to Accounting Money.
 
 ## Deployment rule
 
