@@ -6,9 +6,8 @@ import CommitmentForecastReviewClient from "./review-client";
 export default async function CommitmentForecastReviewPage({params}:{params:Promise<{id:string}>}){
   const {id}=await params;const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser();if(!user)redirect("/login");
   const {data:project}=await supabase.from("projects").select("id,name").eq("id",id).maybeSingle();if(!project)notFound();
-  const enabled=process.env.PROJECT_COST_BRIDGE_ENABLED==="true";
-  if(!enabled)return <Shell id={id} name={project.name}><section className="compact-card" style={{background:"#fff4ce",color:"#775c18"}}><small style={{fontSize:8,fontWeight:900,letterSpacing:".1em"}}>COMMITMENTS + COST TO COMPLETE</small><h2 style={{fontSize:16,margin:"5px 0"}}>Review layer ready; bridge still disabled</h2><p style={{fontSize:10,lineHeight:1.55,margin:0}}>The App has the commitment and forecast workflow, but production does not yet contain the reviewed project-cost tables. Nothing is written until that migration is explicitly approved.</p></section></Shell>;
-
+  const enabled=process.env.PROJECT_COST_BRIDGE_ENABLED==="true"&&process.env.PROJECT_COST_FORECAST_ENABLED==="true";
+  if(!enabled)return <Shell id={id} name={project.name}><section className="compact-card" style={{background:"#fff4ce",color:"#775c18"}}><small style={{fontSize:8,fontWeight:900,letterSpacing:".1em"}}>COMMITMENTS + COST TO COMPLETE</small><h2 style={{fontSize:16,margin:"5px 0"}}>Review layer ready; forecast extension still disabled</h2><p style={{fontSize:10,lineHeight:1.55,margin:0}}>The core project-cost bridge and this commitment/forecast extension are separately gated. No commitment or forecast write occurs until both reviewed migrations are explicitly enabled.</p></section></Shell>;
   const [{data:budget},{data:commitments,error:commitmentError},{data:forecast,error:forecastError}]=await Promise.all([
     supabase.from("project_cost_budgets").select("currency_code").eq("project_id",id).eq("status","approved").maybeSingle(),
     (supabase as any).from("project_cost_commitments").select("id,project_id,description,cost_code,committed_amount,paid_amount,status,due_date,note").eq("project_id",id).order("created_at"),
