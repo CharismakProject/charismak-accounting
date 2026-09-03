@@ -1,4 +1,4 @@
-export type BoqColumnKey = "section" | "serial" | "description" | "quantity" | "unit" | "rate" | "amount";
+export type BoqColumnKey = "section" | "serial" | "description" | "specification" | "quantity" | "unit" | "rate" | "amount";
 
 export type BoqColumnMap = Partial<Record<BoqColumnKey, number>>;
 
@@ -13,6 +13,10 @@ const aliases: Record<BoqColumnKey, string[]> = {
   description: [
     "description", "description of work", "work description", "item description",
     "particulars", "details", "work item", "scope", "scope of work"
+  ],
+  specification: [
+    "specification", "specification / scope", "specification/scope", "scope / specification",
+    "scope/specification", "specification scope", "scope specification", "work specification", "spec"
   ],
   quantity: [
     "qty", "quantity", "measured qty", "measured quantity", "qnty", "quant",
@@ -56,6 +60,7 @@ export function matchBoqColumnHeader(value: unknown): BoqColumnKey | null {
 
   if (/^(section|section name|bill section|element|element name|trade|work section)$/.test(header)) return "section";
   if (/^(s\s*\/\s*n|serial\s*(no|number)?|item\s*(no|number)|ref(erence)?)$/.test(header)) return "serial";
+  if (/^(specification|specification\s*\/\s*scope|scope\s*\/\s*specification|specification scope|scope specification|work specification|spec)$/.test(header)) return "specification";
   if (/description|particulars|scope of work|work item/.test(header)) return "description";
   if (/^(qty|quantity|qnty|measured qty|measured quantity|bill qty|boq qty)$/.test(header)) return "quantity";
   if (/^(unit|uom|unit of measure|unit of measurement)$/.test(header)) return "unit";
@@ -103,6 +108,7 @@ export function detectBoqHeaderRow(rows: unknown[][], maxScanRows = 40): Detecte
     if (columns.rate !== undefined) score += 1;
     if (columns.amount !== undefined) score += 1;
     if (columns.section !== undefined) score += 1;
+    if (columns.specification !== undefined) score += 1;
 
     const hasBoqShape =
       columns.quantity !== undefined ||
