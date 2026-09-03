@@ -1,5 +1,5 @@
-import { isValidCostCode } from "./cost-codes";
-import type { StagedProjectWorkspace } from "../estimate/staged-project-workspace";
+import { isValidCostCode } from "./cost-codes.ts";
+import type { StagedProjectWorkspace } from "../estimate/staged-project-workspace.ts";
 
 export type ProjectApprovalDetails = {
   location: string;
