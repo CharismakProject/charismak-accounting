@@ -166,7 +166,6 @@ function parseSheet(sheet: ParsedWorkbookSheet, sheetIndex: number, warnings: Bo
       const looksLumpSum = /^(ls|l\/s|lump\s*sum|sum|item|lot|nr|no)$/i.test(unitRaw);
       if (looksLumpSum || amountRaw !== null || rate !== null) {
         quantity = 1;
-        if (!unit) unit = "item";
         warnings.push({ sheet: sheet.name, row: r + 1, message: `No numeric quantity was found for “${description.slice(0, 70)}”; quantity 1 is shown for review.` });
       } else {
         quantity = 0;
