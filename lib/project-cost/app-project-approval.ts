@@ -69,6 +69,7 @@ const optional = (value: string | null | undefined) => {
   return trimmed || null;
 };
 const validIsoDate = (value: string | null | undefined) => !value || /^\d{4}-\d{2}-\d{2}$/.test(value);
+const materialKey = (material: string, unit: string) => `${material.trim().toLowerCase()}::${unit.trim().toLowerCase()}`;
 
 export function validateAppProjectApproval(workspace: StagedProjectWorkspace, details: ProjectApprovalDetails) {
   const issues: string[] = [];
@@ -94,7 +95,7 @@ export function validateAppProjectApproval(workspace: StagedProjectWorkspace, de
   if (workspace.project.internalCostBudget != null && Math.abs(round(direct + allowances) - round(workspace.project.internalCostBudget)) > 0.005) issues.push("Direct Cost plus allowances no longer equals the internal project budget.");
   if (!validIsoDate(details.startDate) || !validIsoDate(details.expectedEndDate)) issues.push("Project dates must use YYYY-MM-DD.");
   if (details.startDate && details.expectedEndDate && details.expectedEndDate < details.startDate) issues.push("Expected completion date cannot be before the start date.");
-  for (const material of workspace.materials) if (!material.key || !material.material.trim() || !material.unit.trim() || !Number.isFinite(material.quantity) || material.quantity < 0) issues.push("One or more material schedule rows are invalid.");
+  for (const material of workspace.materials) if (!material.material.trim() || !material.unit.trim() || !Number.isFinite(material.quantity) || material.quantity < 0 || !Array.isArray(material.sourceItems)) issues.push("One or more material schedule rows are invalid.");
   return [...new Set(issues)];
 }
 
@@ -107,7 +108,7 @@ function canonicalApproval(workspace: StagedProjectWorkspace, details: ProjectAp
     project: { name: workspace.project.name.trim(), location: details.location.trim(), projectCode: optional(details.projectCode), clientName: optional(details.clientName), projectType: optional(details.projectType), startDate: optional(details.startDate), expectedEndDate: optional(details.expectedEndDate), description: optional(details.description), currency: workspace.project.currency.toUpperCase(), internalCostBudget: round(workspace.project.internalCostBudget ?? 0), contractValue: workspace.project.contractValue == null ? null : round(workspace.project.contractValue) },
     lines: workspace.budgetLines.map(line => ({ sourceLineId: line.sourceLineId, costCode: line.costCode, description: line.description, unit: line.unit || null, quantity: line.quantity, rate: line.rate, amount: round(line.amount), supplyResponsibility: line.supplyResponsibility })),
     allowances: workspace.budgetAllowances.map(row => ({ sourceAllowanceId: row.sourceAllowanceId, kind: row.kind, description: row.description, amount: round(row.amount) })),
-    materials: workspace.materials.map(row => ({ key: row.key, material: row.material, unit: row.unit, quantity: row.quantity, sources: row.sources })),
+    materials: workspace.materials.map(row => ({ key: materialKey(row.material,row.unit), material: row.material, unit: row.unit, quantity: row.quantity, sources: row.sourceItems })),
   });
 }
 
@@ -144,6 +145,6 @@ export async function buildCreateAppProjectFromEstimateRpcArgs(input: { companyI
     budget_contract_value_snapshot: w.project.contractValue == null ? null : round(w.project.contractValue),
     budget_lines: w.budgetLines.map(line => ({ source_line_id: line.sourceLineId, cost_code: line.costCode, description: line.description, unit: line.unit || null, quantity: line.quantity, rate: line.rate, amount: round(line.amount), supply_responsibility: line.supplyResponsibility })),
     budget_allowances: w.budgetAllowances.map(row => ({ source_allowance_id: row.sourceAllowanceId, kind: row.kind, description: row.description, amount: round(row.amount) })),
-    budget_materials: w.materials.map(row => ({ material_key: row.key, material: row.material, unit: row.unit, quantity: row.quantity, sources: row.sources })),
+    budget_materials: w.materials.map(row => ({ material_key: materialKey(row.material,row.unit), material: row.material, unit: row.unit, quantity: row.quantity, sources: row.sourceItems })),
   };
 }
