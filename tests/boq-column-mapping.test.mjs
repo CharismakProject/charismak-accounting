@@ -37,6 +37,29 @@ test("maps alternate professional BOQ headings", () => {
   });
 });
 
+test("recognizes an explicit section column in wide professional bills", () => {
+  const mapped = mapBoqHeaderRow(["Section", "Item No.", "Description", "Specification / Scope", "Unit", "Qty", "Rate", "Amount"]);
+  assert.deepEqual(mapped, {
+    section: 0,
+    serial: 1,
+    description: 2,
+    unit: 4,
+    quantity: 5,
+    rate: 6,
+    amount: 7,
+  });
+});
+
+test("uses the rightmost duplicate commercial Rate and Amount columns", () => {
+  const mapped = mapBoqHeaderRow(["ITEM", "DESCRIPTION", "UNIT", "QTY", "RATE (₦)", "RATE (₦)", "AMOUNT (₦)"]);
+  assert.equal(mapped.serial, 0);
+  assert.equal(mapped.description, 1);
+  assert.equal(mapped.unit, 2);
+  assert.equal(mapped.quantity, 3);
+  assert.equal(mapped.rate, 5);
+  assert.equal(mapped.amount, 6);
+});
+
 test("detects an unpriced BOQ header without requiring rate or amount", () => {
   const rows = [
     ["PROJECT: SAMPLE RESIDENCE"],
@@ -56,6 +79,7 @@ test("detects an unpriced BOQ header without requiring rate or amount", () => {
 });
 
 test("supports common aliases without treating arbitrary text as a header", () => {
+  assert.equal(matchBoqColumnHeader("Section"), "section");
   assert.equal(matchBoqColumnHeader("Particulars"), "description");
   assert.equal(matchBoqColumnHeader("Qnty"), "quantity");
   assert.equal(matchBoqColumnHeader("UOM"), "unit");
