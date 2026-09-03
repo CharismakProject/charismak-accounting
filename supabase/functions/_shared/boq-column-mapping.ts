@@ -1,8 +1,11 @@
-export type BoqColumnKey = "serial" | "description" | "quantity" | "unit" | "rate" | "amount";
+export type BoqColumnKey = "section" | "serial" | "description" | "quantity" | "unit" | "rate" | "amount";
 
 export type BoqColumnMap = Partial<Record<BoqColumnKey, number>>;
 
 const aliases: Record<BoqColumnKey, string[]> = {
+  section: [
+    "section", "section name", "bill section", "element", "element name", "trade", "work section"
+  ],
   serial: [
     "s/n", "sn", "s no", "s/no", "serial", "serial no", "serial number",
     "item", "item no", "item number", "no", "no.", "ref", "reference"
@@ -51,6 +54,7 @@ export function matchBoqColumnHeader(value: unknown): BoqColumnKey | null {
     if (normalizedAliases[key].has(header)) return key;
   }
 
+  if (/^(section|section name|bill section|element|element name|trade|work section)$/.test(header)) return "section";
   if (/^(s\s*\/\s*n|serial\s*(no|number)?|item\s*(no|number)|ref(erence)?)$/.test(header)) return "serial";
   if (/description|particulars|scope of work|work item/.test(header)) return "description";
   if (/^(qty|quantity|qnty|measured qty|measured quantity|bill qty|boq qty)$/.test(header)) return "quantity";
@@ -98,6 +102,7 @@ export function detectBoqHeaderRow(rows: unknown[][], maxScanRows = 40): Detecte
     if (columns.unit !== undefined) score += 1;
     if (columns.rate !== undefined) score += 1;
     if (columns.amount !== undefined) score += 1;
+    if (columns.section !== undefined) score += 1;
 
     const hasBoqShape =
       columns.quantity !== undefined ||
