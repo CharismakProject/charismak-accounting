@@ -8,6 +8,22 @@ const roleFamilyFromLiveRole=(role:string):RoleFamily=>{
   return "md_owner";
 };
 
+export async function hasActiveWorkspace(){
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user)return false;
+  const {data,error}=await supabase.from("company_members").select("id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  if(error)throw error;
+  return !!data;
+}
+
+export async function createWorkspace(companyName:string){
+  const name=companyName.trim();
+  if(name.length<2)throw new Error("Enter your company or business name.");
+  if(await hasActiveWorkspace())return;
+  const {error}=await supabase.rpc("create_company",{company_name:name,operating_mode:"single_user"});
+  if(error)throw error;
+}
+
 export async function loadWorkspace(){
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)throw new Error("Not signed in");
