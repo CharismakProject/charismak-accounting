@@ -1,86 +1,14 @@
-import { useState } from "react";
-import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type EntryMode = "quick" | "build" | "boq" | "drawing" | "measured" | "studio";
-
-const modes: Array<{id:EntryMode; title:string; note:string; badge:string}> = [
-  {id:"quick",title:"Quick Estimate",note:"Fast preliminary cost for a homeowner or early decision.",badge:"Simple"},
-  {id:"build",title:"Build Estimate",note:"Answer guided questions and enter dimensions for a fuller estimate.",badge:"Guided"},
-  {id:"boq",title:"Upload BOQ",note:"Bring an existing priced or unpriced BOQ for sectioned review, pricing and materials.",badge:"Import"},
-  {id:"drawing",title:"Upload Drawing",note:"AI-assisted interpretation first, with user review before quantities are accepted.",badge:"AI review"},
-  {id:"measured",title:"Enter Quantities",note:"For QSs and contractors who already have measured quantities.",badge:"Professional"},
-  {id:"studio",title:"BOQ Studio",note:"Create, edit, price and convert sectioned BOQs into project cost baselines.",badge:"Workspace"},
-];
-
 export default function EstimateTab(){
-  const [selected,setSelected]=useState<EntryMode>("boq");
   const router=useRouter();
-  const active=modes.find((item)=>item.id===selected)!;
-  const canContinue=selected==="boq"||selected==="studio";
-
-  function openSelected(){
-    if(selected==="boq")router.push("/upload-boq");
-    else if(selected==="studio")router.push("/boq-studio");
-  }
-
-  return <SafeAreaView style={styles.safe} edges={["top"]}>
-    <ScrollView contentContainerStyle={styles.page}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>CHARISMAK APP · ESTIMATE</Text>
-        <Text style={styles.title}>What are you trying to estimate?</Text>
-        <Text style={styles.subtitle}>Start with what you already have. Every route will feed the same sectioned BOQ and project-cost engine.</Text>
-      </View>
-
-      <View style={styles.grid}>
-        {modes.map((item)=><Pressable key={item.id} onPress={()=>setSelected(item.id)} style={[styles.card,selected===item.id&&styles.cardActive]}>
-          <View style={styles.cardTop}><Text style={styles.cardTitle}>{item.title}</Text><Text style={styles.badge}>{item.badge}</Text></View>
-          <Text style={styles.cardText}>{item.note}</Text>
-        </Pressable>)}
-      </View>
-
-      <View style={styles.next}>
-        <Text style={styles.nextEyebrow}>SELECTED ENTRY ROUTE</Text>
-        <Text style={styles.nextTitle}>{active.title}</Text>
-        <Text style={styles.nextText}>{active.note}</Text>
-        <View style={styles.flow}>
-          <Text style={styles.flowText}>Input</Text><Text style={styles.arrow}>→</Text>
-          <Text style={styles.flowText}>Review</Text><Text style={styles.arrow}>→</Text>
-          <Text style={styles.flowText}>Quantities</Text><Text style={styles.arrow}>→</Text>
-          <Text style={styles.flowText}>Sectioned BOQ</Text><Text style={styles.arrow}>→</Text>
-          <Text style={styles.flowText}>Materials</Text><Text style={styles.arrow}>→</Text>
-          <Text style={styles.flowText}>Create Project</Text>
-        </View>
-        {canContinue&&<Pressable style={styles.openButton} onPress={openSelected}><Text style={styles.openButtonText}>{selected==="boq"?"Upload Excel BOQ":"Open BOQ Studio"}</Text></Pressable>}
-        <Text style={styles.safety}>Tap a BOQ quantity to see the materials behind that exact item. AI interprets. Deterministic rules calculate. The user confirms before an estimate becomes a project budget.</Text>
-      </View>
-    </ScrollView>
-  </SafeAreaView>;
+  return <SafeAreaView style={s.safe} edges={["top"]}><ScrollView contentContainerStyle={s.page}>
+    <View style={s.hero}><Text style={s.eye}>CHARISMAK APP · ESTIMATE</Text><Text style={s.title}>Start with what you already have</Text><Text style={s.sub}>For this test build, BOQ import is the active estimating route. Other routes will be opened only after they have complete workflows.</Text></View>
+    <Pressable style={s.primary} onPress={()=>router.push("/upload-boq")}><Text style={s.badge}>ACTIVE</Text><Text style={s.cardTitle}>Upload BOQ</Text><Text style={s.cardText}>XLSX, XLS or CSV → detect primary work items → accept clear suggestions together → review only exceptions → materials → estimate summary.</Text><Text style={s.cta}>Upload BOQ ›</Text></Pressable>
+    <Pressable style={s.secondary} onPress={()=>router.push("/boq-studio")}><Text style={s.badgeBlue}>WORKSPACE</Text><Text style={s.cardTitle}>BOQ Studio</Text><Text style={s.cardText}>Open the most recently reviewed BOQ and trace quantities into materials.</Text><Text style={s.ctaBlue}>Open BOQ Studio ›</Text></Pressable>
+    <View style={s.later}><Text style={s.laterEye}>COMING AFTER CORE ACCEPTANCE</Text><Text style={s.laterTitle}>Quick Estimate · Guided Build · Drawing Upload · Enter Quantities</Text><Text style={s.laterCopy}>These are no longer shown as selectable workflows until each one is actually complete.</Text></View>
+  </ScrollView></SafeAreaView>;
 }
-
-const styles=StyleSheet.create({
-  safe:{flex:1,backgroundColor:"#f4f7fa"},
-  page:{padding:16,paddingBottom:100,gap:16},
-  header:{backgroundColor:"#082945",borderRadius:20,padding:20,gap:7},
-  eyebrow:{fontSize:10,fontWeight:"900",letterSpacing:1.4,color:"#9ec5df"},
-  title:{fontSize:25,fontWeight:"900",color:"#fff"},
-  subtitle:{fontSize:13,lineHeight:19,color:"#d7e5ef"},
-  grid:{gap:10},
-  card:{backgroundColor:"#fff",borderWidth:1,borderColor:"#dbe5ec",borderRadius:16,padding:15,gap:7},
-  cardActive:{borderColor:"#0b5f8f",borderWidth:2,backgroundColor:"#f7fbfe"},
-  cardTop:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",gap:8},
-  cardTitle:{fontSize:16,fontWeight:"800",color:"#14354d",flex:1},
-  cardText:{fontSize:12,lineHeight:18,color:"#617687"},
-  badge:{fontSize:9,fontWeight:"800",color:"#0b5f8f",backgroundColor:"#e8f3f9",paddingHorizontal:8,paddingVertical:4,borderRadius:999},
-  next:{backgroundColor:"#fff",borderRadius:18,padding:17,borderWidth:1,borderColor:"#dbe5ec",gap:8},
-  nextEyebrow:{fontSize:9,fontWeight:"900",letterSpacing:1.1,color:"#16825c"},
-  nextTitle:{fontSize:19,fontWeight:"900",color:"#14354d"},
-  nextText:{fontSize:12,lineHeight:18,color:"#617687"},
-  flow:{flexDirection:"row",flexWrap:"wrap",alignItems:"center",gap:5,marginTop:5},
-  flowText:{fontSize:10,fontWeight:"800",color:"#173f5a",backgroundColor:"#eef4f7",paddingHorizontal:8,paddingVertical:6,borderRadius:8},
-  arrow:{color:"#81909d"},
-  openButton:{marginTop:5,backgroundColor:"#0b668f",paddingVertical:12,paddingHorizontal:14,borderRadius:12,alignItems:"center"},
-  openButtonText:{fontSize:12,fontWeight:"900",color:"#fff"},
-  safety:{marginTop:6,fontSize:10,lineHeight:15,color:"#6a7f8f"},
-});
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:"#f4f7fa"},page:{padding:16,paddingBottom:90,gap:14},hero:{backgroundColor:"#082945",borderRadius:20,padding:20,gap:7},eye:{fontSize:10,fontWeight:"900",letterSpacing:1.3,color:"#9ec5df",fontFamily:"sans-serif"},title:{fontSize:26,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"},sub:{fontSize:13,lineHeight:19,color:"#d7e5ef",fontFamily:"sans-serif"},primary:{backgroundColor:"#fff",borderWidth:2,borderColor:"#0b668f",borderRadius:18,padding:17},secondary:{backgroundColor:"#fff",borderWidth:1,borderColor:"#dbe5ec",borderRadius:18,padding:17},badge:{alignSelf:"flex-start",fontSize:9,fontWeight:"900",color:"#087450",backgroundColor:"#e3f5ed",paddingHorizontal:8,paddingVertical:4,borderRadius:999,fontFamily:"sans-serif"},badgeBlue:{alignSelf:"flex-start",fontSize:9,fontWeight:"900",color:"#0b5f8f",backgroundColor:"#e8f3f9",paddingHorizontal:8,paddingVertical:4,borderRadius:999,fontFamily:"sans-serif"},cardTitle:{fontSize:19,fontWeight:"900",color:"#14354d",marginTop:9,fontFamily:"sans-serif"},cardText:{fontSize:12,lineHeight:18,color:"#617687",marginTop:6,fontFamily:"sans-serif"},cta:{fontSize:12,fontWeight:"900",color:"#087450",marginTop:13,fontFamily:"sans-serif"},ctaBlue:{fontSize:12,fontWeight:"900",color:"#0b5f8f",marginTop:13,fontFamily:"sans-serif"},later:{backgroundColor:"#fff8e8",borderWidth:1,borderColor:"#ecd9a7",borderRadius:16,padding:15},laterEye:{fontSize:9,fontWeight:"900",letterSpacing:1,color:"#866416",fontFamily:"sans-serif"},laterTitle:{fontSize:14,fontWeight:"900",color:"#55451d",marginTop:5,fontFamily:"sans-serif"},laterCopy:{fontSize:11,lineHeight:16,color:"#74694f",marginTop:5,fontFamily:"sans-serif"}});

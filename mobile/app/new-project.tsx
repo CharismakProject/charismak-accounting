@@ -6,18 +6,64 @@ import { supabase } from "../lib/supabase";
 import { loadWorkspace } from "../lib/workspace";
 import { baseStyles as b, Card, ScreenTitle } from "../components/ui";
 
-const num=(v:string)=>{const n=Number(v.replace(/,/g,""));return Number.isFinite(n)&&v.trim()!==""?n:null};
-const norm=(v:string)=>v.trim().toLowerCase().replace(/\s+/g," ");
+const num=(v:string)=>{const n=Number(v.replace(/[,₦\s]/g,""));return Number.isFinite(n)&&v.trim()!==""&&n>=0?n:null;};
+const clean=(v:string)=>v.trim();
+const unique=(values:string[])=>Array.from(new Set(values.map(value=>value.trim()).filter(Boolean)));
 
 export default function NewProject(){
-  const [code,setCode]=useState("");const [name,setName]=useState("");const [client,setClient]=useState("");const [location,setLocation]=useState("");const [type,setType]=useState("");const [contract,setContract]=useState("");const [budget,setBudget]=useState("");const [aliases,setAliases]=useState("");const [busy,setBusy]=useState(false);
-  async function create(){if(!code.trim()||!name.trim())return Alert.alert("Project details","Project code and project name are required.");setBusy(true);try{const w=await loadWorkspace();let clientId:string|null=null;const clientName=client.trim();if(clientName){const {data:c,error}=await supabase.from("clients").upsert({company_id:w.membership.company_id,name:clientName},{onConflict:"company_id,name"}).select("id").single();if(error)throw error;clientId=c.id}
-    const contractValue=num(contract),internalBudget=num(budget);const projectCode=code.trim().toUpperCase();const projectName=name.trim();const {data:p,error}=await supabase.from("projects").insert({company_id:w.membership.company_id,client_id:clientId,project_code:projectCode,name:projectName,project_type:type.trim()||null,location:location.trim()||null,status:"active",contract_value:contractValue,internal_cost_budget:internalBudget,progress_percent:0,aliases:Array.from(new Set([projectName,...aliases.split(",")].map(x=>x.trim()).filter(Boolean))),created_by:w.user.id,updated_by:w.user.id}).select("id").single();if(error)throw error;
-    const expected=contractValue??0,original=internalBudget??0;const {error:summaryError}=await supabase.from("project_financial_summaries").insert({project_id:p.id,original_budget:original,revised_budget:original,expected_contract_revenue:expected,forecast_final_cost:original,forecast_cost_to_complete:original,forecast_profit:expected-original});if(summaryError)throw summaryError;
-    if(clientName){const normalized=norm(clientName);await supabase.from("project_relationships").upsert({company_id:w.membership.company_id,project_id:p.id,relationship_type:"client",display_name:clientName,normalized_name:normalized,match_terms:Array.from(new Set([clientName.toLowerCase(),normalized])),required_terms:[],excluded_terms:[],direction_rule:"credit",default_classification:"project_funding",default_category:null,confidence:96,source:"project_client_profile",is_active:true,created_by:w.user.id,updated_at:new Date().toISOString()},{onConflict:"project_id,relationship_type,normalized_name"})}
-    router.replace({pathname:"/project/[id]",params:{id:p.id}});
-  }catch(e){Alert.alert("Could not create project",e instanceof Error?e.message:"Please try again.")}finally{setBusy(false)}}
-  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content} keyboardShouldPersistTaps="handled"><ScreenTitle eyebrow="NEW PROJECT" title="Start a project" subtitle="Enter what you know now. Documents and money activity can fill the rest as the project develops."/><Card style={s.form}><Field label="Project code" value={code} onChange={setCode} placeholder="e.g. JAHI-01"/><Field label="Project name" value={name} onChange={setName} placeholder="Project name"/><Field label="Client / managed company" value={client} onChange={setClient} placeholder="Client or company"/><Field label="Location" value={location} onChange={setLocation} placeholder="Area / city"/><Field label="Project type" value={type} onChange={setType} placeholder="Residential, fit-out, civil…"/><Field label="Contract / client value" value={contract} onChange={setContract} placeholder="Optional" keyboard="numeric"/><Field label="Internal cost budget" value={budget} onChange={setBudget} placeholder="Optional" keyboard="numeric"/><Field label="Aliases / keywords" value={aliases} onChange={setAliases} placeholder="Jahi, client tag, bank narration keyword"/><Text style={s.help}>You do not need a BOQ to create a project. Add statements, invoices, funding records or other documents later and Charismak will build the project record progressively.</Text><Pressable disabled={busy} onPress={create} style={[s.button,busy&&{opacity:.55}]}><Text style={s.buttonText}>{busy?"Creating project…":"Create project"}</Text></Pressable></Card></ScrollView></SafeAreaView>
+  const [code,setCode]=useState("");
+  const [name,setName]=useState("");
+  const [client,setClient]=useState("");
+  const [location,setLocation]=useState("");
+  const [type,setType]=useState("");
+  const [contract,setContract]=useState("");
+  const [aliases,setAliases]=useState("");
+  const [busy,setBusy]=useState(false);
+
+  async function create(){
+    if(name.trim().length<2)return Alert.alert("Project name required","Enter the project name.");
+    if(location.trim().length<2)return Alert.alert("Project location required","Enter the project location so records can be identified correctly.");
+    setBusy(true);
+    try{
+      const w=await loadWorkspace();
+      if(!w.membership.is_owner)throw new Error("Only the MD / Owner can create a project in this build.");
+      const projectName=clean(name);const projectCode=clean(code).toUpperCase()||null;const clientName=clean(client)||null;const projectLocation=clean(location);const projectType=clean(type)||null;const contractValue=num(contract);
+      const importKeywords=unique([projectName,projectCode??"",clientName??"",projectLocation,...aliases.split(",")]);
+      const {data,error}=await supabase.from("projects").insert({
+        company_id:w.membership.company_id,
+        project_code:projectCode,
+        name:projectName,
+        location:projectLocation,
+        status:"active",
+        reported_progress:0,
+        created_by:w.user.id,
+        client_name:clientName,
+        import_keywords:importKeywords,
+        project_type:projectType,
+        contract_value:contractValue,
+      }).select("id").single();
+      if(error)throw error;
+      router.replace({pathname:"/project/[id]",params:{id:data.id}});
+    }catch(e){Alert.alert("Could not create project",e instanceof Error?e.message:"Please try again.");}
+    finally{setBusy(false);}
+  }
+
+  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content} keyboardShouldPersistTaps="handled">
+    <ScreenTitle eyebrow="NEW PROJECT" title="Start clean" subtitle="Create the project first. Then upload its BOQ and let Charismak review only the exceptions that need you."/>
+    <Card style={s.form}>
+      <Field label="Project name *" value={name} onChange={setName} placeholder="e.g. Two Bedroom Apartment"/>
+      <Field label="Location *" value={location} onChange={setLocation} placeholder="e.g. Jahi, Abuja"/>
+      <Field label="Project code" value={code} onChange={setCode} placeholder="Optional · e.g. JAHI-01"/>
+      <Field label="Client / managed company" value={client} onChange={setClient} placeholder="Optional"/>
+      <Field label="Project type" value={type} onChange={setType} placeholder="Residential, fit-out, civil…"/>
+      <Field label="Contract / client value" value={contract} onChange={setContract} placeholder="Optional" keyboard="numeric"/>
+      <Field label="Import keywords" value={aliases} onChange={setAliases} placeholder="Optional extra names, separated by commas"/>
+      <View style={s.nextBox}><Text style={s.nextTitle}>After creation</Text><Text style={s.nextCopy}>Open the project and tap “Upload BOQ”. The project itself does not depend on any future clients/budget tables.</Text></View>
+      <Pressable disabled={busy} onPress={create} style={[s.button,busy&&{opacity:.55}]}><Text style={s.buttonText}>{busy?"Creating project…":"Create project"}</Text></Pressable>
+    </Card>
+  </ScrollView></SafeAreaView>;
 }
-function Field({label,value,onChange,placeholder,keyboard}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;keyboard?:"numeric"}){return <View style={s.field}><Text style={s.label}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={keyboard} autoCapitalize={label.includes("code")?"characters":"sentences"} style={s.input}/></View>}
-const s=StyleSheet.create({form:{gap:12},field:{gap:5},label:{fontSize:9,fontWeight:"900",color:"#4a6273"},input:{height:44,borderWidth:1,borderColor:"#d8e3ea",borderRadius:12,paddingHorizontal:11,fontSize:11,color:"#183a52",backgroundColor:"#fff"},help:{fontSize:9,lineHeight:14,color:"#718692",backgroundColor:"#f3f7f9",padding:10,borderRadius:10},button:{height:48,borderRadius:14,backgroundColor:"#073f65",alignItems:"center",justifyContent:"center"},buttonText:{fontSize:12,fontWeight:"900",color:"white"}});
+
+function Field({label,value,onChange,placeholder,keyboard}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;keyboard?:"numeric"}){return <View style={s.field}><Text style={s.label}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={keyboard} autoCapitalize={label.toLowerCase().includes("code")?"characters":"sentences"} style={s.input}/></View>}
+
+const s=StyleSheet.create({form:{gap:14},field:{gap:6},label:{fontSize:12,fontWeight:"900",color:"#4a6273",fontFamily:"sans-serif"},input:{height:49,borderWidth:1,borderColor:"#d8e3ea",borderRadius:12,paddingHorizontal:12,fontSize:14,color:"#183a52",backgroundColor:"#fff",fontFamily:"sans-serif"},nextBox:{backgroundColor:"#eef5f9",padding:12,borderRadius:11},nextTitle:{fontSize:12,fontWeight:"900",color:"#173f5a",fontFamily:"sans-serif"},nextCopy:{fontSize:11,lineHeight:16,color:"#617786",marginTop:4,fontFamily:"sans-serif"},button:{height:50,borderRadius:14,backgroundColor:"#073f65",alignItems:"center",justifyContent:"center"},buttonText:{fontSize:14,fontWeight:"900",color:"white",fontFamily:"sans-serif"}});

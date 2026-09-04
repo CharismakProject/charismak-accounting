@@ -17,16 +17,19 @@ export type MobileEstimateItem={
   quantity:number;
   rate?:number|null;
   amount?:number|null;
+  context?:string[];
   materialBreakdown?:{status:string;materials:any[];assumptions?:string[]};
 };
 
-export type MobileEstimateSection={id:string;code?:string;title:string;items:MobileEstimateItem[]};
+export type MobileEstimateSection={id:string;code?:string;title:string;context?:string[];items:MobileEstimateItem[]};
 export type MobileEstimateBoq={id:string;name:string;currency:string;sections:MobileEstimateSection[]};
 
 export type MobileEstimateReviewSession={
   schemaVersion:1;
   savedAt:string;
   companyName:string;
+  projectId?:string;
+  projectName?:string;
   boq:MobileEstimateBoq;
   decisions:Record<string,MobileEstimateDecision>;
   rates:Record<string,string>;

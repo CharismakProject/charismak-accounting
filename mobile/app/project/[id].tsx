@@ -11,71 +11,28 @@ const FIELD_PROGRESS_ENABLED=process.env.EXPO_PUBLIC_PROJECT_PROGRESS_FIELD_REVI
 
 export default function Project(){
   const {id}=useLocalSearchParams<{id:string}>();
-  const [loading,setLoading]=useState(true);
-  const [project,setProject]=useState<any>(null);
-  const [finance,setFinance]=useState<any>(null);
-  const [tx,setTx]=useState<any[]>([]);
-  const [error,setError]=useState("");
-
-  const load=useCallback(async()=>{
-    if(!id)return;
-    setError("");
-    const [{data:p,error:pe},{data:f,error:fe},{data:t,error:te}]=await Promise.all([
-      supabase.from("projects").select("id,project_code,name,location,status,reported_progress,description,project_type,contract_value").eq("id",id).maybeSingle(),
-      supabase.from("project_financial_positions").select("project_id,received,spent,funding_position").eq("project_id",id).maybeSingle(),
-      supabase.from("transactions").select("id,transaction_date,title,description,amount,kind,category:categories(name)").eq("project_id",id).eq("status","posted").order("transaction_date",{ascending:false}).limit(20),
-    ]);
-    const firstError=pe||fe||te;if(firstError)throw firstError;
-    setProject(p);setFinance(f);setTx(t??[]);setLoading(false);
-  },[id]);
-
+  const [loading,setLoading]=useState(true);const [project,setProject]=useState<any>(null);const [finance,setFinance]=useState<any>(null);const [tx,setTx]=useState<any[]>([]);const [error,setError]=useState("");
+  const load=useCallback(async()=>{if(!id)return;setError("");const [{data:p,error:pe},{data:f,error:fe},{data:t,error:te}]=await Promise.all([
+    supabase.from("projects").select("id,project_code,name,location,status,reported_progress,description,project_type,contract_value,client_name").eq("id",id).maybeSingle(),
+    supabase.from("project_financial_positions").select("project_id,received,spent,funding_position").eq("project_id",id).maybeSingle(),
+    supabase.from("transactions").select("id,transaction_date,title,description,amount,kind,category:categories(name)").eq("project_id",id).eq("status","posted").order("transaction_date",{ascending:false}).limit(20),
+  ]);const firstError=pe||fe||te;if(firstError)throw firstError;setProject(p);setFinance(f);setTx(t??[]);setLoading(false);},[id]);
   useFocusEffect(useCallback(()=>{load().catch((e:any)=>{setError(e?.message||"Could not load project");setLoading(false);});},[load]));
-  if(loading)return <SafeAreaView style={b.screen}><View style={s0.center}><ActivityIndicator size="large" color="#073f65"/></View></SafeAreaView>;
-  if(!project)return <SafeAreaView style={b.screen}><View style={s0.center}><Text>Project not available.</Text></View></SafeAreaView>;
-
-  const spent=Number(finance?.spent||0);
-  const funding=Number(finance?.received||0);
-  const position=Number(finance?.funding_position||0);
-  const contract=Number(project.contract_value||0);
-  const basis=contract||funding;
-  const spendPct=basis?Math.min(100,spent/basis*100):0;
-
+  if(loading)return <SafeAreaView style={b.screen}><View style={s.center}><ActivityIndicator size="large" color="#073f65"/></View></SafeAreaView>;
+  if(!project)return <SafeAreaView style={b.screen}><View style={s.center}><Text style={b.muted}>Project not available.</Text></View></SafeAreaView>;
+  const spent=Number(finance?.spent||0),funding=Number(finance?.received||0),position=Number(finance?.funding_position||0),contract=Number(project.contract_value||0);const basis=contract||funding;const spendPct=basis?Math.min(100,spent/basis*100):0;
   return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content}>
-    <View style={s0.backRow}><Pressable onPress={()=>router.back()}><Text style={s0.back}>← Projects</Text></Pressable><Text style={s0.code}>{project.project_code||"PROJECT"}</Text></View>
-    <ScreenTitle eyebrow="PROJECT" title={project.name} subtitle={`${project.location||"Location not set"} · ${String(project.status).replaceAll("_"," ")} · ${Math.round(Number(project.reported_progress||0))}% reported progress`}/>
-
-    {!!error&&<Card style={s0.errorCard}><Text style={s0.errorTitle}>Some project data could not load</Text><Text style={s0.errorCopy}>{error}</Text></Card>}
-
-    <View style={s0.commercial}><Text style={s0.commercialLabel}>RECORDED CONTRACT VALUE</Text><Text style={s0.commercialValue}>{contract?money(contract):"Not entered"}</Text><Text style={s0.commercialNote}>V0.1 uses the current live Accounting project record. Additional-scope, variation and forecast ledgers stay behind their feature gates.</Text></View>
-
-    <View style={b.grid}>
-      <View style={b.half}><Stat label="Received" value={money(funding)}/></View>
-      <View style={b.half}><Stat label="Spent" value={money(spent)}/></View>
-      <View style={b.half}><Stat label="Funding position" value={money(position)} tone={position<0?"red":"navy"}/></View>
-      <View style={b.half}><Stat label="Reported progress" value={`${Math.round(Number(project.reported_progress||0))}%`}/></View>
-    </View>
-
-    <Card><View style={b.row}><Text style={s0.cardTitle}>Spend against {contract?"contract value":"received funding"}</Text><Text style={s0.percent}>{Math.round(spendPct)}%</Text></View><ProgressBar value={spendPct}/><Text style={s0.note}>This is a simple live-schema control indicator, not profit or cost-to-complete.</Text></Card>
-
-    <View style={s0.actions}><Pressable style={b.button} onPress={()=>router.push({pathname:"/(tabs)/add",params:{projectId:id}})}><Text style={b.buttonText}>＋ Add records</Text></Pressable></View>
-
-    {FIELD_PROGRESS_ENABLED&&<View style={s0.actions}>
-      <Pressable style={s0.featureButton} onPress={()=>router.push({pathname:"/project-field-progress/[id]",params:{id}})}><Text style={s0.featureButtonText}>Field Report</Text></Pressable>
-      <Pressable style={s0.featureButton} onPress={()=>router.push({pathname:"/project-field-review/[id]",params:{id}})}><Text style={s0.featureButtonText}>MD Field Review</Text></Pressable>
-    </View>}
-
-    <SectionHead title="Advanced project controls"/>
-    <Card style={s0.gatedCard}>
-      <Text style={s0.gatedTitle}>Project-cost extensions are gated in this APK</Text>
-      <Text style={s0.gatedCopy}>Commitments, cost control, MD field review and progress valuation will appear only after their reviewed migrations are explicitly approved. They are not allowed to query missing production tables.</Text>
-      <View style={s0.gateRow}><Text>Cost control</Text><Text style={COST_CONTROL_ENABLED?s0.ready:s0.gated}>{COST_CONTROL_ENABLED?"ENABLED":"GATED"}</Text></View>
-      <View style={s0.gateRow}><Text>Progress valuation</Text><Text style={PROGRESS_ENABLED?s0.ready:s0.gated}>{PROGRESS_ENABLED?"ENABLED":"GATED"}</Text></View>
-      <View style={s0.gateRow}><Text>Field reporting & MD review</Text><Text style={FIELD_PROGRESS_ENABLED?s0.ready:s0.gated}>{FIELD_PROGRESS_ENABLED?"ENABLED":"GATED"}</Text></View>
-    </Card>
-
-    <SectionHead title="Recent money activity"/>
-    {tx.length?tx.map(t=>{const incoming=t.kind==="income";const signed=incoming?Number(t.amount||0):-Number(t.amount||0);const category=Array.isArray(t.category)?t.category[0]?.name:t.category?.name;return <View key={t.id} style={s0.list}><View style={{flex:1}}><Text numberOfLines={2} style={s0.rowTitle}>{t.title||t.description||"Transaction"}</Text><Text style={s0.rowNote}>{t.transaction_date} · {String(t.kind||"movement").replaceAll("_"," ")}{category?` · ${category}`:""}</Text></View><Text style={[s0.rowAmount,{color:signed<0?"#b3423a":"#087450"}]}>{money(signed)}</Text></View>}):<Card><Text style={b.muted}>No posted money activity yet.</Text></Card>}
+    <View style={s.backRow}><Pressable onPress={()=>router.back()}><Text style={s.back}>← Projects</Text></Pressable><Text style={s.code}>{project.project_code||"PROJECT"}</Text></View>
+    <ScreenTitle eyebrow="PROJECT" title={project.name} subtitle={`${project.location} · ${String(project.status).replaceAll("_"," ")} · ${Math.round(Number(project.reported_progress||0))}% reported progress`}/>
+    {!!project.client_name&&<Text style={s.client}>Client · {project.client_name}</Text>}
+    {!!error&&<Card style={s.errorCard}><Text style={s.errorTitle}>Some project data could not load</Text><Text style={s.errorCopy}>{error}</Text></Card>}
+    <View style={s.commercial}><Text style={s.commercialLabel}>CONTRACT VALUE</Text><Text style={s.commercialValue}>{contract?money(contract):"Not entered"}</Text><Text style={s.commercialNote}>This is the client/contract value recorded on the project. Funding received is shown separately below.</Text></View>
+    <View style={b.grid}><View style={b.half}><Stat label="Received" value={money(funding)}/></View><View style={b.half}><Stat label="Spent" value={money(spent)}/></View><View style={b.half}><Stat label="Funding position" value={money(position)} tone={position<0?"red":"navy"}/></View><View style={b.half}><Stat label="Reported progress" value={`${Math.round(Number(project.reported_progress||0))}%`}/></View></View>
+    <Card><View style={b.row}><Text style={s.cardTitle}>Spend against {contract?"contract value":"received funding"}</Text><Text style={s.percent}>{Math.round(spendPct)}%</Text></View><ProgressBar value={spendPct}/></Card>
+    <View style={s.actions}><Pressable style={s.primaryAction} onPress={()=>router.push({pathname:"/upload-boq",params:{projectId:id,projectName:project.name}})}><Text style={s.primaryTitle}>Upload BOQ</Text><Text style={s.primaryCopy}>Import the project bill and review only exceptions.</Text></Pressable><Pressable style={s.secondaryAction} onPress={()=>router.push({pathname:"/(tabs)/add",params:{projectId:id}})}><Text style={s.secondaryTitle}>Add records</Text><Text style={s.secondaryCopy}>Other document and Money intake follows the stable core.</Text></Pressable></View>
+    {FIELD_PROGRESS_ENABLED&&<View style={s.featureActions}><Pressable style={s.featureButton} onPress={()=>router.push({pathname:"/project-field-progress/[id]",params:{id}})}><Text style={s.featureButtonText}>Field Report</Text></Pressable><Pressable style={s.featureButton} onPress={()=>router.push({pathname:"/project-field-review/[id]",params:{id}})}><Text style={s.featureButtonText}>MD Field Review</Text></Pressable></View>}
+    <SectionHead title="Advanced project controls"/><Card style={s.gatedCard}><Text style={s.gatedTitle}>Advanced controls remain safely staged</Text><Text style={s.gatedCopy}>We are fixing and validating the stable Project → BOQ → Money core first. Cost control, valuations and field review will be opened only with their matching backend.</Text><View style={s.gateRow}><Text style={s.gateLabel}>Cost control</Text><Text style={COST_CONTROL_ENABLED?s.ready:s.gated}>{COST_CONTROL_ENABLED?"ENABLED":"NEXT PHASE"}</Text></View><View style={s.gateRow}><Text style={s.gateLabel}>Progress valuation</Text><Text style={PROGRESS_ENABLED?s.ready:s.gated}>{PROGRESS_ENABLED?"ENABLED":"NEXT PHASE"}</Text></View><View style={s.gateRow}><Text style={s.gateLabel}>Field reporting & MD review</Text><Text style={FIELD_PROGRESS_ENABLED?s.ready:s.gated}>{FIELD_PROGRESS_ENABLED?"ENABLED":"NEXT PHASE"}</Text></View></Card>
+    <SectionHead title="Recent money activity"/>{tx.length?tx.map(t=>{const incoming=t.kind==="income";const signed=incoming?Number(t.amount||0):-Number(t.amount||0);const category=Array.isArray(t.category)?t.category[0]?.name:t.category?.name;return <View key={t.id} style={s.list}><View style={{flex:1}}><Text numberOfLines={2} style={s.rowTitle}>{t.title||t.description||"Transaction"}</Text><Text style={s.rowNote}>{t.transaction_date} · {String(t.kind||"movement").replaceAll("_"," ")}{category?` · ${category}`:""}</Text></View><Text style={[s.rowAmount,{color:signed<0?"#b3423a":"#087450"}]}>{money(signed)}</Text></View>}):<Card><Text style={b.muted}>No posted money activity yet.</Text></Card>}
   </ScrollView></SafeAreaView>;
 }
-
-const s0=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},backRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},back:{fontSize:11,fontWeight:"800",color:"#0b5c8b"},code:{fontSize:9,fontWeight:"900",color:"#6e8495",letterSpacing:1},commercial:{backgroundColor:"#073f65",borderRadius:21,padding:16},commercialLabel:{fontSize:8,letterSpacing:1.3,fontWeight:"900",color:"#9cc2d9"},commercialValue:{fontSize:29,fontWeight:"900",color:"white",marginVertical:7},commercialNote:{fontSize:9,lineHeight:14,color:"#c6dce9"},cardTitle:{fontSize:11,fontWeight:"800",color:"#173b55"},percent:{fontSize:12,fontWeight:"900",color:"#0a5b89"},note:{fontSize:8,color:"#84929d",marginTop:7,lineHeight:12},actions:{flexDirection:"row",gap:8,flexWrap:"wrap"},featureButton:{flexGrow:1,minWidth:130,height:42,borderRadius:12,backgroundColor:"#0b668f",alignItems:"center",justifyContent:"center",paddingHorizontal:12},featureButtonText:{fontSize:10,fontWeight:"900",color:"#fff"},rowTitle:{fontSize:10,fontWeight:"800",color:"#29475c"},rowNote:{fontSize:8,color:"#84929c",marginTop:3},rowAmount:{fontSize:9,fontWeight:"900",color:"#173c56"},list:{flexDirection:"row",gap:10,alignItems:"center",paddingVertical:10,borderBottomWidth:1,borderBottomColor:"#e2e8ec"},gatedCard:{backgroundColor:"#fff8e8",borderColor:"#ecd9a7"},gatedTitle:{fontSize:13,fontWeight:"900",color:"#55451d"},gatedCopy:{fontSize:10,lineHeight:15,color:"#74694f",marginTop:4},gateRow:{flexDirection:"row",justifyContent:"space-between",paddingTop:9,marginTop:6,borderTopWidth:1,borderTopColor:"#eadfbe"},gated:{fontSize:8,fontWeight:"900",color:"#866416"},ready:{fontSize:8,fontWeight:"900",color:"#087450"},errorCard:{borderColor:"#e4b9b9",backgroundColor:"#fff8f8"},errorTitle:{fontSize:13,fontWeight:"900",color:"#7f2929"},errorCopy:{fontSize:10,lineHeight:15,color:"#815858",marginTop:4}});
+const s=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},backRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},back:{fontSize:13,fontWeight:"800",color:"#0b5c8b",fontFamily:"sans-serif"},code:{fontSize:11,fontWeight:"900",color:"#6e8495",letterSpacing:1,fontFamily:"sans-serif"},client:{fontSize:12,color:"#607786",fontWeight:"700",fontFamily:"sans-serif"},commercial:{backgroundColor:"#073f65",borderRadius:21,padding:17},commercialLabel:{fontSize:10,letterSpacing:1.2,fontWeight:"900",color:"#9cc2d9",fontFamily:"sans-serif"},commercialValue:{fontSize:29,fontWeight:"900",color:"white",marginVertical:7,fontFamily:"sans-serif"},commercialNote:{fontSize:11,lineHeight:17,color:"#c6dce9",fontFamily:"sans-serif"},cardTitle:{fontSize:12,fontWeight:"800",color:"#173b55",fontFamily:"sans-serif"},percent:{fontSize:13,fontWeight:"900",color:"#0a5b89",fontFamily:"sans-serif"},actions:{flexDirection:"row",gap:9},primaryAction:{flex:1,backgroundColor:"#073f65",borderRadius:15,padding:14},primaryTitle:{fontSize:14,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"},primaryCopy:{fontSize:10,lineHeight:15,color:"#c8dce9",marginTop:4,fontFamily:"sans-serif"},secondaryAction:{flex:1,backgroundColor:"#fff",borderWidth:1,borderColor:"#d7e3ea",borderRadius:15,padding:14},secondaryTitle:{fontSize:14,fontWeight:"900",color:"#173b55",fontFamily:"sans-serif"},secondaryCopy:{fontSize:10,lineHeight:15,color:"#718492",marginTop:4,fontFamily:"sans-serif"},featureActions:{flexDirection:"row",gap:8,flexWrap:"wrap"},featureButton:{flexGrow:1,minWidth:130,height:42,borderRadius:12,backgroundColor:"#0b668f",alignItems:"center",justifyContent:"center",paddingHorizontal:12},featureButtonText:{fontSize:11,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"},rowTitle:{fontSize:11,fontWeight:"800",color:"#29475c",fontFamily:"sans-serif"},rowNote:{fontSize:10,color:"#84929c",marginTop:3,fontFamily:"sans-serif"},rowAmount:{fontSize:11,fontWeight:"900",fontFamily:"sans-serif"},list:{flexDirection:"row",gap:10,alignItems:"center",paddingVertical:11,borderBottomWidth:1,borderBottomColor:"#e2e8ec"},gatedCard:{backgroundColor:"#fff8e8",borderColor:"#ecd9a7"},gatedTitle:{fontSize:14,fontWeight:"900",color:"#55451d",fontFamily:"sans-serif"},gatedCopy:{fontSize:11,lineHeight:16,color:"#74694f",marginTop:4,fontFamily:"sans-serif"},gateRow:{flexDirection:"row",justifyContent:"space-between",paddingTop:10,marginTop:7,borderTopWidth:1,borderTopColor:"#eadfbe"},gateLabel:{fontSize:11,color:"#55451d",fontFamily:"sans-serif"},gated:{fontSize:9,fontWeight:"900",color:"#866416",fontFamily:"sans-serif"},ready:{fontSize:9,fontWeight:"900",color:"#087450",fontFamily:"sans-serif"},errorCard:{borderColor:"#e4b9b9",backgroundColor:"#fff8f8"},errorTitle:{fontSize:14,fontWeight:"900",color:"#7f2929",fontFamily:"sans-serif"},errorCopy:{fontSize:11,lineHeight:16,color:"#815858",marginTop:4,fontFamily:"sans-serif"}});

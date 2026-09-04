@@ -1,0 +1,29 @@
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { loadEstimateReviewSession } from "../lib/estimate-review-session";
+import { buildMobileEstimateSummary, ZERO_MOBILE_COMMERCIAL_SETTINGS } from "../lib/estimate-summary";
+import type { MobileEstimateReviewSession } from "../lib/estimate-types";
+import { Card, ScreenTitle, SectionHead, baseStyles as b } from "../components/ui";
+
+const money=(n:number|null|undefined,currency="NGN")=>n==null?"—":new Intl.NumberFormat("en-NG",{style:"currency",currency,maximumFractionDigits:0}).format(n);
+export default function ProjectBoqSummary(){
+  const {projectId}=useLocalSearchParams<{projectId?:string}>();const [session,setSession]=useState<MobileEstimateReviewSession|null>(null);const [loading,setLoading]=useState(true);
+  useEffect(()=>{loadEstimateReviewSession().then(setSession).finally(()=>setLoading(false));},[]);
+  const summary=useMemo(()=>session?buildMobileEstimateSummary(session,ZERO_MOBILE_COMMERCIAL_SETTINGS):null,[session]);
+  if(loading)return <SafeAreaView style={b.screen}><View style={s.center}><Text style={b.muted}>Loading reviewed BOQ…</Text></View></SafeAreaView>;
+  if(!session||!summary)return <SafeAreaView style={b.screen}><View style={s.center}><Text style={s.title}>No reviewed BOQ found.</Text><Pressable style={b.button} onPress={()=>router.replace("/upload-boq")}><Text style={b.buttonText}>Upload BOQ</Text></Pressable></View></SafeAreaView>;
+  const target=projectId||session.projectId;const totalItems=session.boq.sections.reduce((n,section)=>n+section.items.length,0);const confirmed=Object.values(session.decisions).filter(d=>d.confirmed).length;
+  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content}>
+    <Pressable onPress={()=>target?router.replace({pathname:"/project/[id]",params:{id:target}}):router.back()}><Text style={s.back}>← Project</Text></Pressable>
+    <ScreenTitle eyebrow="REVIEWED BOQ" title={session.projectName||session.boq.name} subtitle="This review stays separate from Money. We will connect approved project budgets only when the project-cost backend is opened."/>
+    <View style={s.hero}><Text style={s.heroLabel}>WORKING DIRECT TOTAL</Text><Text style={s.heroValue}>{money(summary.directCost,session.boq.currency)}</Text><Text style={s.heroNote}>{confirmed}/{totalItems} primary work items confirmed · {summary.unpricedItems} unpriced · {summary.arithmeticMismatchItems} arithmetic mismatch{summary.arithmeticMismatchItems===1?"":"es"}</Text></View>
+    <View style={b.grid}><View style={b.half}><Metric label="Source priced total" value={money(summary.sourcePricedTotal,session.boq.currency)}/></View><View style={b.half}><Metric label="Material groups" value={String(summary.materials.length)}/></View><View style={b.half}><Metric label="BOQ sections" value={String(session.boq.sections.length)}/></View><View style={b.half}><Metric label="Primary items" value={String(totalItems)}/></View></View>
+    <SectionHead title="Materials calculated"/>{summary.materials.length?summary.materials.slice(0,30).map((m:any)=><Card key={m.key}><View style={b.row}><View style={{flex:1}}><Text style={s.material}>{m.material}</Text><Text style={s.note}>{m.sources.length} BOQ source item{m.sources.length===1?"":"s"}</Text></View><Text style={s.quantity}>{Number(m.quantity).toLocaleString("en-NG",{maximumFractionDigits:3})} {m.unit}</Text></View></Card>):<Card><Text style={b.muted}>No deterministic material totals were produced from the confirmed items.</Text></Card>}
+    <Card style={s.notice}><Text style={s.noticeTitle}>Fresh-test rule</Text><Text style={s.noticeCopy}>The live Project exists. The BOQ has been reviewed locally. No expense, funding or budget transaction has been created automatically.</Text></Card>
+    <Pressable style={s.projectButton} onPress={()=>target?router.replace({pathname:"/project/[id]",params:{id:target}}):router.replace("/(tabs)/projects")}><Text style={s.projectButtonText}>Return to project</Text></Pressable>
+  </ScrollView></SafeAreaView>;
+}
+function Metric({label,value}:{label:string;value:string}){return <Card><Text style={s.metricLabel}>{label.toUpperCase()}</Text><Text style={s.metricValue}>{value}</Text></Card>}
+const s=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center",padding:24,gap:14},back:{fontSize:13,fontWeight:"900",color:"#0b5f91",fontFamily:"sans-serif"},title:{fontSize:18,fontWeight:"900",color:"#173a53",fontFamily:"sans-serif"},hero:{backgroundColor:"#073f65",borderRadius:20,padding:17},heroLabel:{fontSize:10,fontWeight:"900",letterSpacing:1,color:"#9cc2d9",fontFamily:"sans-serif"},heroValue:{fontSize:29,fontWeight:"900",color:"#fff",marginVertical:7,fontFamily:"sans-serif"},heroNote:{fontSize:11,lineHeight:17,color:"#c6dce9",fontFamily:"sans-serif"},metricLabel:{fontSize:9,fontWeight:"900",color:"#718391",fontFamily:"sans-serif"},metricValue:{fontSize:16,fontWeight:"900",color:"#173f5a",marginTop:4,fontFamily:"sans-serif"},material:{fontSize:12,fontWeight:"900",color:"#29475c",fontFamily:"sans-serif"},note:{fontSize:10,color:"#84909a",marginTop:3,fontFamily:"sans-serif"},quantity:{fontSize:12,fontWeight:"900",color:"#0b5c8b",fontFamily:"sans-serif"},notice:{backgroundColor:"#fff8e8",borderColor:"#ecd9a7"},noticeTitle:{fontSize:13,fontWeight:"900",color:"#55451d",fontFamily:"sans-serif"},noticeCopy:{fontSize:11,lineHeight:17,color:"#74694f",marginTop:4,fontFamily:"sans-serif"},projectButton:{height:50,borderRadius:14,backgroundColor:"#073f65",alignItems:"center",justifyContent:"center"},projectButtonText:{fontSize:13,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"}});
