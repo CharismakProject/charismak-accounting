@@ -18,7 +18,7 @@ const moneyLike = /^(?:[₦$€£]?\s*)?(?:[-+]?\d[\d,]*(?:\.\d+)?|[-+]?\.\d+|�
 const unitLike = /^(?:m|m2|m3|m²|m³|sqm|sq\.m|sqmt|cum|cm|mm|lm|kg|g|t|ton|tonne|tonnes|bag|bags|nr|nrs|no|nos|number|numbers|item|items|ls|l\/s|sum|lot|set|sets|trip|trips|sheet|sheets|roll|rolls|length|lengths|litre|litres|liter|liters|point|points)$/i;
 const summaryLike = /\b(?:sub\s*total|subtotal|grand\s*total|carried\s+to|carried\s+forward|brought\s+forward|to\s+summary|to\s+collection|commercial\s+summary|general\s+summary|bill\s*(?:nr\.?|no\.?)?\s*\d*\s*total|total\s+contract\s+sum)\b/i;
 const headerWord = (line:string) => line.toUpperCase().replace(/[^A-Z0-9]/g, "");
-const tradeWords = /\b(?:preliminar|substructure|superstructure|excavat|earthwork|concrete|reinforcement|formwork|block|masonry|steel|roof|door|window|glaz|plaster|render|screed|floor|wall|ceiling|paint|joinery|plumbing|sanitary|electrical|mechanical|external|waterproof|demolition|finishing|filling|carcassing|fixtures?|fence|gate|paving|landscap)\b/i;
+const tradeWords = /\b(?:preliminar|substructure|superstructure|excavat|excavation|earthwork|earthworks|concrete|reinforcement|formwork|block|masonry|steel|roof|door|window|glaz|plaster|render|screed|floor|wall|ceiling|paint|joinery|plumbing|sanitary|electrical|mechanical|external|waterproof|demolition|finishing|filling|carcassing|fixtures?|fence|gate|paving|landscap)\b/i;
 const safeId=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,58)||"boq";
 const clean=(value:string)=>value.replace(/\u00a0/g," ").replace(/[ \t]+/g," ").trim();
 const sectionKey=(value:string)=>clean(value).toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
