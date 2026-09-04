@@ -7,6 +7,7 @@ import { Card, money, ProgressBar, ScreenTitle, SectionHead, Stat, baseStyles as
 
 const COST_CONTROL_ENABLED=process.env.EXPO_PUBLIC_PROJECT_COST_BRIDGE_ENABLED==="true";
 const PROGRESS_ENABLED=process.env.EXPO_PUBLIC_PROJECT_PROGRESS_VALUATION_ENABLED==="true";
+const FIELD_PROGRESS_ENABLED=process.env.EXPO_PUBLIC_PROJECT_PROGRESS_FIELD_REVIEW_ENABLED==="true";
 
 export default function Project(){
   const {id}=useLocalSearchParams<{id:string}>();
@@ -58,12 +59,18 @@ export default function Project(){
 
     <View style={s0.actions}><Pressable style={b.button} onPress={()=>router.push({pathname:"/(tabs)/add",params:{projectId:id}})}><Text style={b.buttonText}>＋ Add records</Text></Pressable></View>
 
+    {FIELD_PROGRESS_ENABLED&&<View style={s0.actions}>
+      <Pressable style={s0.featureButton} onPress={()=>router.push({pathname:"/project-field-progress/[id]",params:{id}})}><Text style={s0.featureButtonText}>Field Report</Text></Pressable>
+      <Pressable style={s0.featureButton} onPress={()=>router.push({pathname:"/project-field-review/[id]",params:{id}})}><Text style={s0.featureButtonText}>MD Field Review</Text></Pressable>
+    </View>}
+
     <SectionHead title="Advanced project controls"/>
     <Card style={s0.gatedCard}>
       <Text style={s0.gatedTitle}>Project-cost extensions are gated in this APK</Text>
       <Text style={s0.gatedCopy}>Commitments, cost control, MD field review and progress valuation will appear only after their reviewed migrations are explicitly approved. They are not allowed to query missing production tables.</Text>
       <View style={s0.gateRow}><Text>Cost control</Text><Text style={COST_CONTROL_ENABLED?s0.ready:s0.gated}>{COST_CONTROL_ENABLED?"ENABLED":"GATED"}</Text></View>
       <View style={s0.gateRow}><Text>Progress valuation</Text><Text style={PROGRESS_ENABLED?s0.ready:s0.gated}>{PROGRESS_ENABLED?"ENABLED":"GATED"}</Text></View>
+      <View style={s0.gateRow}><Text>Field reporting & MD review</Text><Text style={FIELD_PROGRESS_ENABLED?s0.ready:s0.gated}>{FIELD_PROGRESS_ENABLED?"ENABLED":"GATED"}</Text></View>
     </Card>
 
     <SectionHead title="Recent money activity"/>
@@ -71,4 +78,4 @@ export default function Project(){
   </ScrollView></SafeAreaView>;
 }
 
-const s0=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},backRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},back:{fontSize:11,fontWeight:"800",color:"#0b5c8b"},code:{fontSize:9,fontWeight:"900",color:"#6e8495",letterSpacing:1},commercial:{backgroundColor:"#073f65",borderRadius:21,padding:16},commercialLabel:{fontSize:8,letterSpacing:1.3,fontWeight:"900",color:"#9cc2d9"},commercialValue:{fontSize:29,fontWeight:"900",color:"white",marginVertical:7},commercialNote:{fontSize:9,lineHeight:14,color:"#c6dce9"},cardTitle:{fontSize:11,fontWeight:"800",color:"#173b55"},percent:{fontSize:12,fontWeight:"900",color:"#0a5b89"},note:{fontSize:8,color:"#84929d",marginTop:7,lineHeight:12},actions:{flexDirection:"row",gap:8,flexWrap:"wrap"},rowTitle:{fontSize:10,fontWeight:"800",color:"#29475c"},rowNote:{fontSize:8,color:"#84929c",marginTop:3},rowAmount:{fontSize:9,fontWeight:"900",color:"#173c56"},list:{flexDirection:"row",gap:10,alignItems:"center",paddingVertical:10,borderBottomWidth:1,borderBottomColor:"#e2e8ec"},gatedCard:{backgroundColor:"#fff8e8",borderColor:"#ecd9a7"},gatedTitle:{fontSize:13,fontWeight:"900",color:"#55451d"},gatedCopy:{fontSize:10,lineHeight:15,color:"#74694f",marginTop:4},gateRow:{flexDirection:"row",justifyContent:"space-between",paddingTop:9,marginTop:6,borderTopWidth:1,borderTopColor:"#eadfbe"},gated:{fontSize:8,fontWeight:"900",color:"#866416"},ready:{fontSize:8,fontWeight:"900",color:"#087450"},errorCard:{borderColor:"#e4b9b9",backgroundColor:"#fff8f8"},errorTitle:{fontSize:13,fontWeight:"900",color:"#7f2929"},errorCopy:{fontSize:10,lineHeight:15,color:"#815858",marginTop:4}});
+const s0=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},backRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},back:{fontSize:11,fontWeight:"800",color:"#0b5c8b"},code:{fontSize:9,fontWeight:"900",color:"#6e8495",letterSpacing:1},commercial:{backgroundColor:"#073f65",borderRadius:21,padding:16},commercialLabel:{fontSize:8,letterSpacing:1.3,fontWeight:"900",color:"#9cc2d9"},commercialValue:{fontSize:29,fontWeight:"900",color:"white",marginVertical:7},commercialNote:{fontSize:9,lineHeight:14,color:"#c6dce9"},cardTitle:{fontSize:11,fontWeight:"800",color:"#173b55"},percent:{fontSize:12,fontWeight:"900",color:"#0a5b89"},note:{fontSize:8,color:"#84929d",marginTop:7,lineHeight:12},actions:{flexDirection:"row",gap:8,flexWrap:"wrap"},featureButton:{flexGrow:1,minWidth:130,height:42,borderRadius:12,backgroundColor:"#0b668f",alignItems:"center",justifyContent:"center",paddingHorizontal:12},featureButtonText:{fontSize:10,fontWeight:"900",color:"#fff"},rowTitle:{fontSize:10,fontWeight:"800",color:"#29475c"},rowNote:{fontSize:8,color:"#84929c",marginTop:3},rowAmount:{fontSize:9,fontWeight:"900",color:"#173c56"},list:{flexDirection:"row",gap:10,alignItems:"center",paddingVertical:10,borderBottomWidth:1,borderBottomColor:"#e2e8ec"},gatedCard:{backgroundColor:"#fff8e8",borderColor:"#ecd9a7"},gatedTitle:{fontSize:13,fontWeight:"900",color:"#55451d"},gatedCopy:{fontSize:10,lineHeight:15,color:"#74694f",marginTop:4},gateRow:{flexDirection:"row",justifyContent:"space-between",paddingTop:9,marginTop:6,borderTopWidth:1,borderTopColor:"#eadfbe"},gated:{fontSize:8,fontWeight:"900",color:"#866416"},ready:{fontSize:8,fontWeight:"900",color:"#087450"},errorCard:{borderColor:"#e4b9b9",backgroundColor:"#fff8f8"},errorTitle:{fontSize:13,fontWeight:"900",color:"#7f2929"},errorCopy:{fontSize:10,lineHeight:15,color:"#815858",marginTop:4}});
