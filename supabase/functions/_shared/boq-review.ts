@@ -63,10 +63,15 @@ export function suggestBoqItemReview(sectionTitle:string,item:ReviewableBoqItem,
   const itemText=normalized(`${item.description} ${item.unit??""}`);
   const sectionText=normalized(`${sectionTitle} ${sectionContext.join(" ")}`);
   const recipe=suggestRecipe(itemText||sectionText);
-  const code=costFromText(itemText,recipe.code)??costFromText(sectionText,null);
+  const sectionCode=costFromText(sectionText,null);
+  const itemExplicitSupply=explicitItemSupply(itemText);
+  const itemCode=costFromText(itemText,recipe.code);
+  const preferSectionForExplicitConsumable=itemExplicitSupply?.value==="contractor"&&recipe.family==="needs_review"&&sectionCode!==null;
+  const code=preferSectionForExplicitConsumable?sectionCode:(itemCode??sectionCode);
   const supply=supplySuggestion(itemText,sectionText,recipe.family);
   const reasons:string[]=[];
   if(recipe.strong)reasons.push(`${recipe.label} detected from the BOQ wording.`);else reasons.push("No confident material-recipe family was found from the description.");
+  if(preferSectionForExplicitConsumable)reasons.push("Explicit supply item is kept in its BOQ trade section instead of being reclassified by incidental material wording.");
   if(code)reasons.push(`Suggested cost group: ${code} ${costName(code)}.`);
   if(supply.reason)reasons.push(supply.reason);
   let confidence:BoqReviewConfidence="low";
