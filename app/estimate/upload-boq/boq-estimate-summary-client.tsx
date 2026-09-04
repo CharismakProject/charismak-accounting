@@ -11,10 +11,10 @@ const money=(value:number,currency:string)=>new Intl.NumberFormat("en-NG",{style
 const num=(value:string)=>{const parsed=Number(value);return Number.isFinite(parsed)&&parsed>=0?Math.min(parsed,100):0;};
 const safeName=(value:string)=>value.trim().replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^-+|-+$/g,"")||"estimate";
 
-export default function BoqEstimateSummaryClient({boq,materializedBoq,workingRates,decisions,companyName}:{boq:SectionedBoq;materializedBoq:SectionedBoq|null;workingRates:WorkingRateMap;decisions:ReviewedBoqDecisionMap;companyName?:string}){
+export default function BoqEstimateSummaryClient({boq,materializedBoq,workingRates,decisions,companyName,sourceReviewIssue}:{boq:SectionedBoq;materializedBoq:SectionedBoq|null;workingRates:WorkingRateMap;decisions:ReviewedBoqDecisionMap;companyName?:string;sourceReviewIssue?:string|null}){
   const [settings,setSettings]=useState({...ZERO_COMMERCIAL_SETTINGS});
   const summary=useMemo(()=>buildEstimateSummary({boq,materializedBoq,workingRates,settings}),[boq,materializedBoq,workingRates,settings]);
-  const reviewStatus=summary.unpricedItems?`${summary.unpricedItems} unpriced · total provisional`:summary.arithmeticMismatchItems?`${summary.arithmeticMismatchItems} source mismatch${summary.arithmeticMismatchItems===1?"":"es"} · review required`:"All BOQ amounts reconciled";
+  const reviewStatus=summary.unpricedItems?`${summary.unpricedItems} unpriced · total provisional`:summary.arithmeticMismatchItems?`${summary.arithmeticMismatchItems} source mismatch${summary.arithmeticMismatchItems===1?"":"es"} · review required`:sourceReviewIssue?"Source document review required":"All BOQ amounts reconciled";
 
   function setPercent(key:keyof typeof settings,value:string){setSettings(current=>({...current,[key]:num(value)}));}
   function openPdf(){const html=buildEstimatePrintHtml({boq,summary,companyName,projectName:boq.name});const win=window.open("","_blank","noopener,noreferrer");if(!win)return alert("Allow pop-ups for Charismak App to open the PDF/print preview.");win.document.open();win.document.write(html);win.document.close();win.focus();setTimeout(()=>win.print(),250);}
@@ -23,11 +23,12 @@ export default function BoqEstimateSummaryClient({boq,materializedBoq,workingRat
   return <section className="data-card" style={{marginTop:14,overflow:"hidden"}}>
     <div style={{padding:17,background:"#082945",color:"#fff",display:"flex",justifyContent:"space-between",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
       <div><small style={{fontSize:9,fontWeight:900,letterSpacing:".1em",color:"#9ec5df"}}>ESTIMATE SUMMARY V1</small><h2 style={{margin:"5px 0 4px",fontSize:19}}>Turn the reviewed BOQ into a commercial estimate</h2><p style={{margin:0,maxWidth:720,fontSize:11,lineHeight:1.55,color:"#d7e5ef"}}>Direct Cost remains the construction-cost base. Imported Amount stays visible for audit while the working amount is calculated from Qty × the rate you review.</p></div>
-      <div style={{textAlign:"right"}}><small style={{display:"block",fontSize:9,color:"#b7ccda"}}>CLIENT PRICE / GRAND TOTAL</small><strong style={{fontSize:24}}>{money(summary.grandTotal,summary.currency)}</strong><small style={{display:"block",marginTop:3,color:summary.isCommercialTotalComplete?"#8de1bc":"#ffd47d"}}>{reviewStatus}</small></div>
+      <div style={{textAlign:"right"}}><small style={{display:"block",fontSize:9,color:"#b7ccda"}}>CLIENT PRICE / GRAND TOTAL</small><strong style={{fontSize:24}}>{money(summary.grandTotal,summary.currency)}</strong><small style={{display:"block",marginTop:3,color:summary.isCommercialTotalComplete&&!sourceReviewIssue?"#8de1bc":"#ffd47d"}}>{reviewStatus}</small></div>
     </div>
 
     <div style={{padding:14,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:8,background:"#f7fafc"}}><Metric label="Working Direct" value={money(summary.directCost,summary.currency)}/><Metric label="Imported Line Amounts" value={money(summary.sourcePricedTotal,summary.currency)}/><Metric label="Amount Difference" value={money(summary.arithmeticMismatchDifference,summary.currency)}/><Metric label="Contingency" value={money(summary.contingency,summary.currency)}/><Metric label="Profit" value={money(summary.profit,summary.currency)}/><Metric label="Materials Identified" value={String(summary.materials.length)}/></div>
 
+    {sourceReviewIssue&&<div style={warning}><b>Source document review:</b> {sourceReviewIssue} You may review/edit the estimate and export it, but Project staging remains disabled.</div>}
     {summary.unpricedItems>0&&<div style={warning}><b>Provisional total:</b> {summary.unpricedItems} BOQ item{summary.unpricedItems===1?" is":"s are"} still missing a working rate. Exports preserve those items as UNPRICED and Project staging stays blocked.</div>}
     {summary.arithmeticMismatchItems>0&&<div style={warning}><b>Source arithmetic review:</b> {summary.arithmeticMismatchItems} imported BOQ item{summary.arithmeticMismatchItems===1?" has":"s have"} Amount ≠ Qty × imported Rate. The unresolved working-total difference is <b>{money(summary.arithmeticMismatchDifference,summary.currency)}</b>. Return to Rate Engine and explicitly confirm Qty × Rate, edit the rate, or use the source Amount. Project staging stays blocked until every mismatch is resolved.</div>}
 
@@ -39,7 +40,7 @@ export default function BoqEstimateSummaryClient({boq,materializedBoq,workingRat
     </div>
 
     <div style={{padding:14,borderTop:"1px solid #e3e9ed",background:"#fbfcfd",display:"flex",gap:8,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap"}}><div style={{fontSize:9,lineHeight:1.45,color:"#6d7f8c",maxWidth:650}}><b>Export snapshot:</b> PDF/Print and Excel retain source Amount, reviewed working rate and deterministic working Amount so arithmetic decisions remain auditable. Exporting does not create a project or post anything to Accounting.</div><div style={{display:"flex",gap:7,flexWrap:"wrap"}}><button type="button" onClick={openPdf} style={secondary}>PDF / Print</button><button type="button" onClick={downloadExcel} style={primary}>Download Excel</button></div></div>
-    <div style={{padding:14,borderTop:"1px solid #e3e9ed",background:"#fff"}}><BoqProjectPreviewClient boq={boq} summary={summary} decisions={decisions}/></div>
+    <div style={{padding:14,borderTop:"1px solid #e3e9ed",background:"#fff"}}><BoqProjectPreviewClient boq={boq} summary={summary} decisions={decisions} sourceReviewIssue={sourceReviewIssue}/></div>
   </section>;
 }
 
