@@ -18,9 +18,10 @@ const moneyLike = /^(?:[₦$€£]?\s*)?(?:[-+]?\d[\d,]*(?:\.\d+)?|[-+]?\.\d+|�
 const unitLike = /^(?:m|m2|m3|m²|m³|sqm|sq\.m|sqmt|cum|cm|mm|lm|kg|g|t|ton|tonne|tonnes|bag|bags|nr|nrs|no|nos|number|numbers|item|items|ls|l\/s|sum|lot|set|sets|trip|trips|sheet|sheets|roll|rolls|length|lengths|litre|litres|liter|liters|point|points)$/i;
 const summaryLike = /\b(?:sub\s*total|subtotal|grand\s*total|carried\s+to|carried\s+forward|brought\s+forward|to\s+summary|to\s+collection|commercial\s+summary|general\s+summary|bill\s*(?:nr\.?|no\.?)?\s*\d*\s*total|total\s+contract\s+sum)\b/i;
 const headerWord = (line:string) => line.toUpperCase().replace(/[^A-Z0-9]/g, "");
-const tradeWords = /\b(?:preliminar|substructure|superstructure|excavat|earthwork|concrete|reinforcement|formwork|block|masonry|steel|roof|door|window|glaz|plaster|render|screed|floor|wall|ceiling|paint|joinery|plumbing|sanitary|electrical|mechanical|external|waterproof|demolition|finishing|filling|carcassing|fixtures?)\b/i;
+const tradeWords = /\b(?:preliminar|substructure|superstructure|excavat|earthwork|concrete|reinforcement|formwork|block|masonry|steel|roof|door|window|glaz|plaster|render|screed|floor|wall|ceiling|paint|joinery|plumbing|sanitary|electrical|mechanical|external|waterproof|demolition|finishing|filling|carcassing|fixtures?|fence|gate|paving|landscap)\b/i;
 const safeId=(value:string)=>value.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,58)||"boq";
 const clean=(value:string)=>value.replace(/\u00a0/g," ").replace(/[ \t]+/g," ").trim();
+const sectionKey=(value:string)=>clean(value).toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 
 function numberToken(value:string):number|null{
   const raw=clean(value).replace(/[₦$€£]/g,"").replace(/,/g,"").replace(/^\((.*)\)$/,"-$1");
@@ -67,7 +68,7 @@ function contextCandidate(line:string){
   if(!line||line.length>900||isHeader(line)||summaryLike.test(line)||isPageNoise(line)||looksSection(line))return false;
   return !measuredTail(line);
 }
-function isCategoryAfterNumericSerial(description:string){return description.length<70&&tradeWords.test(description)&&/\b(?:works?|finishes?|flooring|roofing|fence|earthworks?)\b/i.test(description);}
+function isCategoryAfterNumericSerial(description:string){return description.length<70&&tradeWords.test(description)&&/\b(?:works?|finishes?|flooring|roofing|fence|earthworks?|paving|landscaping)\b/i.test(description);}
 
 export function parseBoqPdfText(rawText:string,fileName="Imported PDF BOQ",sourceMode:PdfBoqSourceMode="selectable_text"):ParsedPdfBoq{
   const warnings:PdfBoqWarning[]=[];
@@ -79,11 +80,16 @@ export function parseBoqPdfText(rawText:string,fileName="Imported PDF BOQ",sourc
   let pendingParts:string[]=[];
   let itemIndex=0;
   const pushSection=()=>{if(current.items.length){sections.push(current);current={title:"General",context:[],items:[]};}};
-  const startSection=(title:string)=>{if(current.items.length)sections.push(current);current={title:sectionTitle(title)||"General",context:[],items:[]};pendingSerial=undefined;pendingParts=[];};
+  const startSection=(title:string)=>{
+    const nextTitle=sectionTitle(title)||"General";
+    if(current.items.length&&sectionKey(current.title)===sectionKey(nextTitle)){pendingSerial=undefined;pendingParts=[];return;}
+    if(current.items.length)sections.push(current);
+    current={title:nextTitle,context:[],items:[]};pendingSerial=undefined;pendingParts=[];
+  };
   const addItem=(lineNo:number,tail:MeasuredTail)=>{
     const prefix=clean(tail.prefix);
     const parsed=stripSerial(prefix);
-    let serial=parsed.serial??pendingSerial;
+    const serial=parsed.serial??pendingSerial;
     let description=clean([...pendingParts,parsed.description].filter(Boolean).join(" "));
     if(!description&&prefix)description=prefix;
     if(!description){warnings.push({line:lineNo,message:"Measured values were found without a usable description; the line was kept out for review."});pendingSerial=undefined;pendingParts=[];return;}
