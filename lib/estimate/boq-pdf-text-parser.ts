@@ -12,10 +12,11 @@ export type ParsedPdfBoq = {
 };
 
 type DraftSection = { title: string; context: string[]; items: SectionedBoqItem[] };
-type MeasuredTail = { prefix: string; unit: string; quantity: number; rate: number | null; amount: number | null; lumpSum: boolean };
+type MeasuredTail = { prefix: string; unit: string; quantity: number; rate: number | null; amount: number | null; lumpSum: boolean; unitKnown: boolean };
 
 const moneyLike = /^(?:[₦$€£]?\s*)?(?:[-+]?\d[\d,]*(?:\.\d+)?|[-+]?\.\d+|—|-|--|n\/?a)$/i;
 const unitLike = /^(?:m|m2|m3|m²|m³|sqm|sq\.m|sqmt|cum|cm|mm|lm|kg|g|t|ton|tonne|tonnes|bag|bags|nr|nrs|no|nos|number|numbers|item|items|ls|l\/s|sum|lot|set|sets|trip|trips|sheet|sheets|roll|rolls|length|lengths|litre|litres|liter|liters|point|points)$/i;
+const plausibleSourceUnit = /^(?!n$)[a-z][a-z0-9²³./"'-]{1,11}$/i;
 const summaryLike = /\b(?:sub\s*total|subtotal|grand\s*total|carried\s+to|carried\s+forward|brought\s+forward|to\s+summary|to\s+collection|commercial\s+summary|general\s+summary|bill\s*(?:nr\.?|no\.?)?\s*\d*\s*total|total\s+contract\s+sum)\b/i;
 const headerWord = (line:string) => line.toUpperCase().replace(/[^A-Z0-9]/g, "");
 const tradeWords = /\b(?:preliminar|substructure|superstructure|excavat|excavation|earthwork|earthworks|concrete|reinforcement|formwork|block|masonry|steel|roof|door|window|glaz|plaster|render|screed|floor|wall|ceiling|paint|joinery|plumbing|sanitary|electrical|mechanical|external|waterproof|demolition|finishing|filling|carcassing|fixtures?|fence|gate|paving|landscap)\b/i;
@@ -28,14 +29,17 @@ function numberToken(value:string):number|null{
   if(!raw||/^(?:—|-|--|n\/?a)$/i.test(raw)||!/^[-+]?\d*\.?\d+$/.test(raw))return null;
   const n=Number(raw);return Number.isFinite(n)?n:null;
 }
-function isHeader(line:string){const c=headerWord(line);return c.includes("DESCRIPTION")&&(c.includes("QTY")||c.includes("QUANTITY"))&&c.includes("RATE")&&c.includes("AMOUNT");}
+function sourceUnit(value:string):{ok:boolean;known:boolean}{if(unitLike.test(value))return{ok:true,known:true};if(plausibleSourceUnit.test(value))return{ok:true,known:false};return{ok:false,known:false};}
+function isHeader(line:string){const c=headerWord(line);return c.includes("DESCRIPTION")&&c.includes("AMOUNT")&&(c.includes("QTY")||c.includes("QUANTITY")||c.includes("UNIT")||c.includes("RATE"));}
+function isSummaryLine(line:string){return /^summary$/i.test(line)||summaryLike.test(line);}
 function isPageNoise(line:string){return /^(?:page\s*\d+|confidential\b|prepared\s+(?:by|with)\b)/i.test(line);}
 function stripSerial(prefix:string):{serial?:string;description:string}{
   const m=prefix.match(/^((?:\d+(?:\.\d+)*|[A-Z](?:\.[A-Z])?|[A-Z]\d+))\s*[.)-]?\s+(.+)$/i);
   return m?{serial:m[1],description:clean(m[2])}:{description:clean(prefix)};
 }
+function serialOnlyToken(value:string){return value.match(/^((?:\d+(?:\.\d+)*|[A-Z](?:\.[A-Z])?|[A-Z]\d+))$/i)?.[1];}
 function looksSection(line:string){
-  if(!line||line.length>150||summaryLike.test(line)||isHeader(line)||isPageNoise(line))return false;
+  if(!line||line.length>150||isSummaryLine(line)||isHeader(line)||isPageNoise(line))return false;
   if(/^(?:ELEMENT\s+(?:NR|NO)\.?\s*[\w.]+|[A-Z]\d{1,3}\s*[:.-]|[A-Z]\d{1,3}\s+[A-Z])/i.test(line))return true;
   if(/^\s*[A-Z]\.?\s+[A-Z][A-Z &/()-]{5,}$/.test(line))return true;
   if(line===line.toUpperCase()&&/[A-Z]{3}/.test(line)&&tradeWords.test(line))return true;
@@ -52,23 +56,32 @@ function measuredTail(line:string):MeasuredTail|null{
   const rateLike=moneyLike.test(at(n-2));
   if(n>=4&&amountLike&&rateLike){
     const a=numberToken(at(n-1)),r=numberToken(at(n-2));
-    const qA=numberToken(at(n-4));const uA=at(n-3);
-    if(qA!==null&&unitLike.test(uA))return{prefix:tokens.slice(0,n-4).join(" "),unit:uA,quantity:qA,rate:r,amount:a,lumpSum:false};
-    const uB=at(n-4);const qB=numberToken(at(n-3));
-    if(unitLike.test(uB)&&qB!==null)return{prefix:tokens.slice(0,n-4).join(" "),unit:uB,quantity:qB,rate:r,amount:a,lumpSum:false};
+    const qA=numberToken(at(n-4));const uA=at(n-3);const unitA=sourceUnit(uA);
+    if(qA!==null&&unitA.ok)return{prefix:tokens.slice(0,n-4).join(" "),unit:uA,quantity:qA,rate:r,amount:a,lumpSum:false,unitKnown:unitA.known};
+    const uB=at(n-4);const qB=numberToken(at(n-3));const unitB=sourceUnit(uB);
+    if(unitB.ok&&qB!==null)return{prefix:tokens.slice(0,n-4).join(" "),unit:uB,quantity:qB,rate:r,amount:a,lumpSum:false,unitKnown:unitB.known};
   }
-  if(n>=2&&unitLike.test(at(n-2))&&moneyLike.test(at(n-1))){
+  if(n>=2&&sourceUnit(at(n-2)).ok&&moneyLike.test(at(n-1))){
     const unit=at(n-2);const amount=numberToken(at(n-1));
-    if(/^(?:ls|l\/s|sum|item|lot)$/i.test(unit)&&amount!==null)return{prefix:tokens.slice(0,n-2).join(" "),unit,quantity:1,rate:amount,amount,lumpSum:true};
+    if(/^(?:ls|l\/s|sum|item|lot)$/i.test(unit)&&amount!==null)return{prefix:tokens.slice(0,n-2).join(" "),unit,quantity:1,rate:amount,amount,lumpSum:true,unitKnown:true};
   }
   return null;
 }
+function amountOnlyPrelimTail(line:string,section:string):MeasuredTail|null{
+  if(!/preliminar|contingenc/i.test(section))return null;
+  const tokens=clean(line).split(/\s+/).filter(Boolean);if(tokens.length<3)return null;
+  const amount=numberToken(tokens.at(-1)??"");if(amount===null)return null;
+  const prefix=tokens.slice(0,-1).join(" ");const parsed=stripSerial(prefix);
+  if(!parsed.serial||parsed.description.length<3)return null;
+  return{prefix,unit:"LS",quantity:1,rate:amount,amount,lumpSum:true,unitKnown:true};
+}
 
 function contextCandidate(line:string){
-  if(!line||line.length>900||isHeader(line)||summaryLike.test(line)||isPageNoise(line)||looksSection(line))return false;
+  if(!line||line.length>900||isHeader(line)||isSummaryLine(line)||isPageNoise(line)||looksSection(line))return false;
   return !measuredTail(line);
 }
 function isCategoryAfterNumericSerial(description:string){return description.length<70&&tradeWords.test(description)&&/\b(?:works?|finishes?|flooring|roofing|fence|earthworks?|paving|landscaping)\b/i.test(description);}
+function trailingContinuation(line:string){return line.length<=180&&/^(?:[a-z(]|and\b|including\b|maximum\b|minimum\b)/.test(line)&&!isSummaryLine(line)&&!looksSection(line)&&!isHeader(line)&&!measuredTail(line);}
 
 export function parseBoqPdfText(rawText:string,fileName="Imported PDF BOQ",sourceMode:PdfBoqSourceMode="selectable_text"):ParsedPdfBoq{
   const warnings:PdfBoqWarning[]=[];
@@ -78,35 +91,42 @@ export function parseBoqPdfText(rawText:string,fileName="Imported PDF BOQ",sourc
   let current:DraftSection={title:"General",context:[],items:[]};
   let pendingSerial:string|undefined;
   let pendingParts:string[]=[];
+  let trailingItem:SectionedBoqItem|null=null;
   let itemIndex=0;
   const pushSection=()=>{if(current.items.length){sections.push(current);current={title:"General",context:[],items:[]};}};
   const startSection=(title:string)=>{
     const nextTitle=sectionTitle(title)||"General";
-    if(current.items.length&&sectionKey(current.title)===sectionKey(nextTitle)){pendingSerial=undefined;pendingParts=[];return;}
+    if(current.items.length&&sectionKey(current.title)===sectionKey(nextTitle)){pendingSerial=undefined;pendingParts=[];trailingItem=null;return;}
     if(current.items.length)sections.push(current);
-    current={title:nextTitle,context:[],items:[]};pendingSerial=undefined;pendingParts=[];
+    current={title:nextTitle,context:[],items:[]};pendingSerial=undefined;pendingParts=[];trailingItem=null;
   };
   const addItem=(lineNo:number,tail:MeasuredTail)=>{
     const prefix=clean(tail.prefix);
-    const parsed=stripSerial(prefix);
+    const prefixSerial=serialOnlyToken(prefix);
+    const parsed=prefixSerial?{serial:prefixSerial,description:""}:stripSerial(prefix);
     const serial=parsed.serial??pendingSerial;
     let description=clean([...pendingParts,parsed.description].filter(Boolean).join(" "));
-    if(!description&&prefix)description=prefix;
-    if(!description){warnings.push({line:lineNo,message:"Measured values were found without a usable description; the line was kept out for review."});pendingSerial=undefined;pendingParts=[];return;}
+    let pulledContext=false;
+    if(!description&&current.context.length){const candidate=current.context.at(-1)!;if(contextCandidate(candidate)){description=candidate;current.context.pop();pulledContext=true;}}
+    if(!description&&prefix&&!prefixSerial)description=prefix;
+    if(!description){warnings.push({line:lineNo,message:"Measured values were found without a usable description; the line was kept out for review."});pendingSerial=undefined;pendingParts=[];trailingItem=null;return;}
     if(!serial)warnings.push({line:lineNo,message:`“${description.slice(0,70)}” has measured values but no item number; it was retained for review.`});
     if(tail.lumpSum)warnings.push({line:lineNo,message:`“${description.slice(0,70)}” was interpreted as a lump-sum item with quantity 1.`});
+    if(!tail.unitKnown)warnings.push({line:lineNo,message:`Source unit “${tail.unit}” for “${description.slice(0,60)}” is non-standard and was preserved exactly for review.`});
     if(tail.rate!==null&&tail.amount!==null&&Math.abs(tail.quantity*tail.rate-tail.amount)>.05)warnings.push({line:lineNo,message:`Amount for “${description.slice(0,70)}” does not equal Qty × Rate; source values were preserved for review.`});
     itemIndex++;
-    current.items.push({id:`pdf-item-${itemIndex}-${safeId(description)}`,itemNo:serial,description,unit:tail.unit,quantity:tail.quantity,rate:tail.rate,amount:tail.amount,materialBreakdown:{status:"needs_review",materials:[],assumptions:[sourceMode==="ocr"?"This item came from OCR and must be reviewed against the source PDF before use.":"Material recipe has not yet been confirmed for this imported PDF BOQ item."]}});
+    const item:SectionedBoqItem={id:`pdf-item-${itemIndex}-${safeId(description)}`,itemNo:serial,description,unit:tail.unit,quantity:tail.quantity,rate:tail.rate,amount:tail.amount,materialBreakdown:{status:"needs_review",materials:[],assumptions:[sourceMode==="ocr"?"This item came from OCR and must be reviewed against the source PDF before use.":"Material recipe has not yet been confirmed for this imported PDF BOQ item."]}};
+    current.items.push(item);trailingItem=pulledContext?item:null;
     pendingSerial=undefined;pendingParts=[];
   };
 
   for(let i=0;i<lines.length;i++){
     const line=lines[i];const lineNo=i+1;
+    if(trailingItem){if(trailingContinuation(line)){trailingItem.description=clean(`${trailingItem.description} ${line}`);trailingItem=null;continue;}trailingItem=null;}
     if(line==="--- PAGE ---"||isHeader(line)||isPageNoise(line))continue;
-    if(summaryLike.test(line)){pendingSerial=undefined;pendingParts=[];continue;}
+    if(isSummaryLine(line)){pendingSerial=undefined;pendingParts=[];continue;}
     if(looksSection(line)){startSection(line);continue;}
-    const tail=measuredTail(line);
+    const tail=measuredTail(line)??amountOnlyPrelimTail(line,current.title);
     if(tail){addItem(lineNo,tail);continue;}
     const serialOnly=line.match(/^((?:\d+(?:\.\d+)*|[A-Z](?:\.[A-Z])?|[A-Z]\d+))\s*$/i);
     if(serialOnly){pendingSerial=serialOnly[1];pendingParts=[];continue;}
