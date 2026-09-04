@@ -18,6 +18,7 @@ jobs:
       EXPO_PUBLIC_PROJECT_COST_PAYMENT_LINK_ENABLED: 'false'
       EXPO_PUBLIC_PROJECT_PROGRESS_VALUATION_ENABLED: 'false'
       EXPO_PUBLIC_PROJECT_PROGRESS_FIELD_REVIEW_ENABLED: 'false'
+      ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
     defaults:
       run:
         working-directory: mobile
@@ -29,15 +30,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Type check
         run: npm run typecheck
@@ -46,12 +50,12 @@ jobs:
         run: npx expo prebuild --platform android --non-interactive --no-install
 
       - name: Build standalone internal-test APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleRelease --no-daemon
+        run: cd android && chmod +x gradlew && ./gradlew assembleRelease --no-daemon --build-cache
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: charismak-accounting-android-test
+          name: Charismak-App-Android-Test
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
