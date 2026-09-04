@@ -5,22 +5,70 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { Card, money, ProgressBar, ScreenTitle, SectionHead, Stat, baseStyles as b } from "../../components/ui";
 
+const COST_CONTROL_ENABLED=process.env.EXPO_PUBLIC_PROJECT_COST_BRIDGE_ENABLED==="true";
+const PROGRESS_ENABLED=process.env.EXPO_PUBLIC_PROJECT_PROGRESS_VALUATION_ENABLED==="true";
+
 export default function Project(){
-  const {id}=useLocalSearchParams<{id:string}>();const [loading,setLoading]=useState(true);const [project,setProject]=useState<any>(null);const [commercial,setCommercial]=useState<any>(null);const [summary,setSummary]=useState<any>(null);const [docs,setDocs]=useState<any[]>([]);const [commitments,setCommitments]=useState<any[]>([]);const [tx,setTx]=useState<any[]>([]);
-  const load=useCallback(async()=>{if(!id)return;const [{data:p},{data:c},{data:s},{data:d},{data:k},{data:t}]=await Promise.all([supabase.from("projects").select("id,project_code,name,location,status,progress_percent,description,project_type,site_address").eq("id",id).maybeSingle(),supabase.from("project_commercial_positions").select("*").eq("project_id",id).maybeSingle(),supabase.from("project_financial_summaries").select("*").eq("project_id",id).maybeSingle(),supabase.from("source_documents").select("id,file_name,document_type,amount,uploaded_at").eq("project_id",id).order("uploaded_at",{ascending:false}).limit(12),supabase.from("project_commitments").select("id,description,approved_amount,paid_amount,outstanding_amount,status").eq("project_id",id).order("created_at",{ascending:false}).limit(12),supabase.from("canonical_transactions").select("id,transaction_date,narration,counterparty,signed_amount,classification,category_name").eq("project_id",id).eq("status","posted").order("transaction_date",{ascending:false}).limit(20)]);setProject(p);setCommercial(c);setSummary(s);setDocs(d??[]);setCommitments(k??[]);setTx(t??[]);setLoading(false)},[id]);useFocusEffect(useCallback(()=>{load()},[load]));
-  if(loading)return <SafeAreaView style={b.screen}><View style={s0.center}><ActivityIndicator size="large" color="#073f65"/></View></SafeAreaView>;if(!project)return <SafeAreaView style={b.screen}><View style={s0.center}><Text>Project not available.</Text></View></SafeAreaView>;
-  const additions=Number(commercial?.additional_scope||0)+Number(commercial?.variations||0);const commercialValue=Number(commercial?.identified_commercial_value||0);const spent=Number(summary?.confirmed_expenditure||0);const funding=Number(summary?.funding_received||0);const cash=Number(summary?.cash_balance||0);const spendPct=commercialValue?Math.min(100,spent/commercialValue*100):funding?Math.min(100,spent/funding*100):0;
+  const {id}=useLocalSearchParams<{id:string}>();
+  const [loading,setLoading]=useState(true);
+  const [project,setProject]=useState<any>(null);
+  const [finance,setFinance]=useState<any>(null);
+  const [tx,setTx]=useState<any[]>([]);
+  const [error,setError]=useState("");
+
+  const load=useCallback(async()=>{
+    if(!id)return;
+    setError("");
+    const [{data:p,error:pe},{data:f,error:fe},{data:t,error:te}]=await Promise.all([
+      supabase.from("projects").select("id,project_code,name,location,status,reported_progress,description,project_type,contract_value").eq("id",id).maybeSingle(),
+      supabase.from("project_financial_positions").select("project_id,received,spent,funding_position").eq("project_id",id).maybeSingle(),
+      supabase.from("transactions").select("id,transaction_date,title,description,amount,kind,category:categories(name)").eq("project_id",id).eq("status","posted").order("transaction_date",{ascending:false}).limit(20),
+    ]);
+    const firstError=pe||fe||te;if(firstError)throw firstError;
+    setProject(p);setFinance(f);setTx(t??[]);setLoading(false);
+  },[id]);
+
+  useFocusEffect(useCallback(()=>{load().catch((e:any)=>{setError(e?.message||"Could not load project");setLoading(false);});},[load]));
+  if(loading)return <SafeAreaView style={b.screen}><View style={s0.center}><ActivityIndicator size="large" color="#073f65"/></View></SafeAreaView>;
+  if(!project)return <SafeAreaView style={b.screen}><View style={s0.center}><Text>Project not available.</Text></View></SafeAreaView>;
+
+  const spent=Number(finance?.spent||0);
+  const funding=Number(finance?.received||0);
+  const position=Number(finance?.funding_position||0);
+  const contract=Number(project.contract_value||0);
+  const basis=contract||funding;
+  const spendPct=basis?Math.min(100,spent/basis*100):0;
+
   return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content}>
-    <View style={s0.backRow}><Pressable onPress={()=>router.back()}><Text style={s0.back}>← Projects</Text></Pressable><Text style={s0.code}>{project.project_code}</Text></View>
-    <ScreenTitle eyebrow="PROJECT" title={project.name} subtitle={`${project.location||"Location not set"} · ${String(project.status).replaceAll("_"," ")} · ${Math.round(Number(project.progress_percent||0))}% progress`}/>
-    <View style={s0.commercial}><Text style={s0.commercialLabel}>CURRENT IDENTIFIED COMMERCIAL VALUE</Text><Text style={s0.commercialValue}>{money(commercialValue)}</Text><View style={s0.breakdown}><View><Text style={s0.small}>Base</Text><Text style={s0.breakVal}>{money(commercial?.base_scope)}</Text></View><View><Text style={s0.small}>Additional / variations</Text><Text style={s0.breakVal}>{money(additions)}</Text></View><View><Text style={s0.small}>Client invoices</Text><Text style={s0.breakVal}>{money(commercial?.documented_client_invoices)}</Text></View></View></View>
-    <View style={b.grid}><View style={b.half}><Stat label="Funding received" value={money(funding)}/></View><View style={b.half}><Stat label="Confirmed spend" value={money(spent)}/></View><View style={b.half}><Stat label="Project cash" value={money(cash)} tone={cash<0?"red":"navy"}/></View><View style={b.half}><Stat label="Still committed" value={money(summary?.outstanding_commitments)} tone={Number(summary?.outstanding_commitments||0)>0?"orange":"navy"}/></View></View>
-    <Card><View style={b.row}><Text style={s0.cardTitle}>Spend against commercial/funding position</Text><Text style={s0.percent}>{Math.round(spendPct)}%</Text></View><ProgressBar value={spendPct}/><Text style={s0.note}>This is a control indicator, not profit. Profit uses forecast final cost and approved revenue separately.</Text></Card>
-    <View style={s0.actions}><Pressable style={b.button} onPress={()=>router.push({pathname:"/(tabs)/add",params:{projectId:id}})}><Text style={b.buttonText}>＋ Add files</Text></Pressable><Pressable style={b.outline} onPress={()=>router.push("/(tabs)/approvals")}><Text style={s0.outlineText}>Request / Approvals</Text></Pressable></View>
-    <View style={s0.actions}><Pressable style={b.outline} onPress={()=>router.push(`/project-field-progress/${id}` as never)}><Text style={s0.outlineText}>Field Report</Text></Pressable><Pressable style={b.outline} onPress={()=>router.push(`/project-field-review/${id}` as never)}><Text style={s0.outlineText}>MD Field Review</Text></Pressable><Pressable style={b.outline} onPress={()=>router.push(`/project-progress/${id}` as never)}><Text style={s0.outlineText}>Progress Valuation</Text></Pressable><Pressable style={b.outline} onPress={()=>router.push(`/project-cost/${id}` as never)}><Text style={s0.outlineText}>Cost Control</Text></Pressable></View>
-    <SectionHead title="Documents" action="Add" onPress={()=>router.push({pathname:"/(tabs)/add",params:{projectId:id}})}/>{docs.length?docs.slice(0,6).map(d=><Card key={d.id} style={s0.rowCard}><View style={{flex:1}}><Text numberOfLines={1} style={s0.rowTitle}>{d.file_name}</Text><Text style={s0.rowNote}>{String(d.document_type).replaceAll("_"," ")} · {new Date(d.uploaded_at).toLocaleDateString()}</Text></View><Text style={s0.rowAmount}>{money(d.amount)}</Text></Card>):<Card><Text style={b.muted}>No project documents yet. Add what you already use; Charismak will organise it.</Text></Card>}
-    <SectionHead title="Outstanding commitments"/>{commitments.filter(x=>Number(x.outstanding_amount||0)>0).length?commitments.filter(x=>Number(x.outstanding_amount||0)>0).map(k=><View key={k.id} style={s0.list}><View style={{flex:1}}><Text style={s0.rowTitle}>{k.description}</Text><Text style={s0.rowNote}>Approved {money(k.approved_amount)} · Paid {money(k.paid_amount)}</Text></View><Text style={s0.rowAmount}>{money(k.outstanding_amount)}</Text></View>):<Card><Text style={b.muted}>Nothing is currently recorded as outstanding.</Text></Card>}
-    <SectionHead title="Recent money activity"/>{tx.length?tx.slice(0,10).map(t=><View key={t.id} style={s0.list}><View style={{flex:1}}><Text numberOfLines={2} style={s0.rowTitle}>{t.narration||t.counterparty||"Transaction"}</Text><Text style={s0.rowNote}>{t.transaction_date} · {String(t.classification||"movement").replaceAll("_"," ")}{t.category_name?` · ${t.category_name}`:""}</Text></View><Text style={[s0.rowAmount,{color:Number(t.signed_amount)<0?"#b3423a":"#087450"}]}>{money(t.signed_amount)}</Text></View>):<Card><Text style={b.muted}>No confirmed money activity yet.</Text></Card>}
+    <View style={s0.backRow}><Pressable onPress={()=>router.back()}><Text style={s0.back}>← Projects</Text></Pressable><Text style={s0.code}>{project.project_code||"PROJECT"}</Text></View>
+    <ScreenTitle eyebrow="PROJECT" title={project.name} subtitle={`${project.location||"Location not set"} · ${String(project.status).replaceAll("_"," ")} · ${Math.round(Number(project.reported_progress||0))}% reported progress`}/>
+
+    {!!error&&<Card style={s0.errorCard}><Text style={s0.errorTitle}>Some project data could not load</Text><Text style={s0.errorCopy}>{error}</Text></Card>}
+
+    <View style={s0.commercial}><Text style={s0.commercialLabel}>RECORDED CONTRACT VALUE</Text><Text style={s0.commercialValue}>{contract?money(contract):"Not entered"}</Text><Text style={s0.commercialNote}>V0.1 uses the current live Accounting project record. Additional-scope, variation and forecast ledgers stay behind their feature gates.</Text></View>
+
+    <View style={b.grid}>
+      <View style={b.half}><Stat label="Received" value={money(funding)}/></View>
+      <View style={b.half}><Stat label="Spent" value={money(spent)}/></View>
+      <View style={b.half}><Stat label="Funding position" value={money(position)} tone={position<0?"red":"navy"}/></View>
+      <View style={b.half}><Stat label="Reported progress" value={`${Math.round(Number(project.reported_progress||0))}%`}/></View>
+    </View>
+
+    <Card><View style={b.row}><Text style={s0.cardTitle}>Spend against {contract?"contract value":"received funding"}</Text><Text style={s0.percent}>{Math.round(spendPct)}%</Text></View><ProgressBar value={spendPct}/><Text style={s0.note}>This is a simple live-schema control indicator, not profit or cost-to-complete.</Text></Card>
+
+    <View style={s0.actions}><Pressable style={b.button} onPress={()=>router.push({pathname:"/(tabs)/add",params:{projectId:id}})}><Text style={b.buttonText}>＋ Add records</Text></Pressable></View>
+
+    <SectionHead title="Advanced project controls"/>
+    <Card style={s0.gatedCard}>
+      <Text style={s0.gatedTitle}>Project-cost extensions are gated in this APK</Text>
+      <Text style={s0.gatedCopy}>Commitments, cost control, MD field review and progress valuation will appear only after their reviewed migrations are explicitly approved. They are not allowed to query missing production tables.</Text>
+      <View style={s0.gateRow}><Text>Cost control</Text><Text style={COST_CONTROL_ENABLED?s0.ready:s0.gated}>{COST_CONTROL_ENABLED?"ENABLED":"GATED"}</Text></View>
+      <View style={s0.gateRow}><Text>Progress valuation</Text><Text style={PROGRESS_ENABLED?s0.ready:s0.gated}>{PROGRESS_ENABLED?"ENABLED":"GATED"}</Text></View>
+    </Card>
+
+    <SectionHead title="Recent money activity"/>
+    {tx.length?tx.map(t=>{const incoming=t.kind==="income";const signed=incoming?Number(t.amount||0):-Number(t.amount||0);const category=Array.isArray(t.category)?t.category[0]?.name:t.category?.name;return <View key={t.id} style={s0.list}><View style={{flex:1}}><Text numberOfLines={2} style={s0.rowTitle}>{t.title||t.description||"Transaction"}</Text><Text style={s0.rowNote}>{t.transaction_date} · {String(t.kind||"movement").replaceAll("_"," ")}{category?` · ${category}`:""}</Text></View><Text style={[s0.rowAmount,{color:signed<0?"#b3423a":"#087450"}]}>{money(signed)}</Text></View>}):<Card><Text style={b.muted}>No posted money activity yet.</Text></Card>}
   </ScrollView></SafeAreaView>;
 }
-const s0=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},backRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},back:{fontSize:11,fontWeight:"800",color:"#0b5c8b"},code:{fontSize:9,fontWeight:"900",color:"#6e8495",letterSpacing:1},commercial:{backgroundColor:"#073f65",borderRadius:21,padding:16},commercialLabel:{fontSize:8,letterSpacing:1.3,fontWeight:"900",color:"#9cc2d9"},commercialValue:{fontSize:29,fontWeight:"900",color:"white",marginVertical:7},breakdown:{flexDirection:"row",gap:7},small:{fontSize:7,color:"#afd0e2"},breakVal:{fontSize:10,fontWeight:"900",color:"white",marginTop:2},cardTitle:{fontSize:11,fontWeight:"800",color:"#173b55"},percent:{fontSize:12,fontWeight:"900",color:"#0a5b89"},note:{fontSize:8,color:"#84929d",marginTop:7,lineHeight:12},actions:{flexDirection:"row",gap:8,flexWrap:"wrap"},outlineText:{fontSize:10,fontWeight:"900",color:"#18465f"},rowCard:{flexDirection:"row",alignItems:"center",gap:8,paddingVertical:11},rowTitle:{fontSize:10,fontWeight:"800",color:"#29475c"},rowNote:{fontSize:8,color:"#84929c",marginTop:3},rowAmount:{fontSize:9,fontWeight:"900",color:"#173c56"},list:{flexDirection:"row",gap:10,alignItems:"center",paddingVertical:10,borderBottomWidth:1,borderBottomColor:"#e2e8ec"}});
+
+const s0=StyleSheet.create({center:{flex:1,alignItems:"center",justifyContent:"center"},backRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center"},back:{fontSize:11,fontWeight:"800",color:"#0b5c8b"},code:{fontSize:9,fontWeight:"900",color:"#6e8495",letterSpacing:1},commercial:{backgroundColor:"#073f65",borderRadius:21,padding:16},commercialLabel:{fontSize:8,letterSpacing:1.3,fontWeight:"900",color:"#9cc2d9"},commercialValue:{fontSize:29,fontWeight:"900",color:"white",marginVertical:7},commercialNote:{fontSize:9,lineHeight:14,color:"#c6dce9"},cardTitle:{fontSize:11,fontWeight:"800",color:"#173b55"},percent:{fontSize:12,fontWeight:"900",color:"#0a5b89"},note:{fontSize:8,color:"#84929d",marginTop:7,lineHeight:12},actions:{flexDirection:"row",gap:8,flexWrap:"wrap"},rowTitle:{fontSize:10,fontWeight:"800",color:"#29475c"},rowNote:{fontSize:8,color:"#84929c",marginTop:3},rowAmount:{fontSize:9,fontWeight:"900",color:"#173c56"},list:{flexDirection:"row",gap:10,alignItems:"center",paddingVertical:10,borderBottomWidth:1,borderBottomColor:"#e2e8ec"},gatedCard:{backgroundColor:"#fff8e8",borderColor:"#ecd9a7"},gatedTitle:{fontSize:13,fontWeight:"900",color:"#55451d"},gatedCopy:{fontSize:10,lineHeight:15,color:"#74694f",marginTop:4},gateRow:{flexDirection:"row",justifyContent:"space-between",paddingTop:9,marginTop:6,borderTopWidth:1,borderTopColor:"#eadfbe"},gated:{fontSize:8,fontWeight:"900",color:"#866416"},ready:{fontSize:8,fontWeight:"900",color:"#087450"},errorCard:{borderColor:"#e4b9b9",backgroundColor:"#fff8f8"},errorTitle:{fontSize:13,fontWeight:"900",color:"#7f2929"},errorCopy:{fontSize:10,lineHeight:15,color:"#815858",marginTop:4}});
