@@ -122,7 +122,8 @@ export function parseBoqPdfText(rawText:string,fileName="Imported PDF BOQ",sourc
 
   for(let i=0;i<lines.length;i++){
     const line=lines[i];const lineNo=i+1;
-    if(trailingItem){if(trailingContinuation(line)){trailingItem.description=clean(`${trailingItem.description} ${line}`);trailingItem=null;continue;}trailingItem=null;}
+    const activeTrailingItem=trailingItem as SectionedBoqItem|null;
+    if(activeTrailingItem){if(trailingContinuation(line)){activeTrailingItem.description=clean(`${activeTrailingItem.description} ${line}`);trailingItem=null;continue;}trailingItem=null;}
     if(line==="--- PAGE ---"||isHeader(line)||isPageNoise(line))continue;
     if(isSummaryLine(line)){pendingSerial=undefined;pendingParts=[];continue;}
     if(looksSection(line)){startSection(line);continue;}
