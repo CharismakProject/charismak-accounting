@@ -58,6 +58,15 @@ export default function UploadBoq(){
 
   const working=useMemo(()=>result?.boq?buildBoqWorkingSummary({boq:result.boq,rates,rateSources,preliminariesPricing}):null,[result,rates,rateSources,preliminariesPricing]);
   const exceptionIds=useMemo(()=>new Set((working?.lines??[]).filter(line=>line.amount==null||line.sourceArithmeticMismatch||(line.kind==="preliminary"&&Math.abs(line.preliminary?.componentDifference??0)>.05)).map(line=>line.itemId)),[working]);
+  const visibleWarnings=useMemo(()=>{
+    if(!result?.boq)return [];
+    const prefixes=result.boq.sections.flatMap(section=>section.items).filter(item=>Boolean(preliminariesPricing[item.id])).map(item=>item.description.slice(0,60).toLowerCase());
+    return result.warnings.filter(warning=>{
+      const message=warning.message.toLowerCase();
+      const genericQuantityNote=/no numeric quantity.*quantity 1 is shown for review/.test(message);
+      return !genericQuantityNote||!prefixes.some(prefix=>prefix.length>8&&message.includes(prefix));
+    });
+  },[result,preliminariesPricing]);
 
   function changeRate(id:string,value:string){setRates(current=>({...current,[id]:value}));setRateSources(current=>({...current,[id]:"manual"}));}
 
@@ -90,7 +99,7 @@ export default function UploadBoq(){
 
       {result.boq.sections.map(section=><SectionBlock key={section.id} section={section} isOpen={Boolean(open[section.id])} showAll={showAll} exceptionIds={exceptionIds} rates={rates} preliminariesPricing={preliminariesPricing} onToggle={()=>setOpen(current=>({...current,[section.id]:!current[section.id]}))} onRateChange={changeRate}/>) }
 
-      {!!result.warnings.length&&<View style={s.notes}><Text style={s.notesTitle}>{result.warnings.length} parser note{result.warnings.length===1?"":"s"}</Text><Text style={s.notesCopy}>Parser notes are retained for transparency; they do not automatically change the BOQ.</Text>{result.warnings.slice(0,12).map((warning,index)=><Text key={`${warning.sheet}-${warning.row}-${index}`} style={s.noteLine}>{warning.sheet}{warning.row?` row ${warning.row}`:""}: {warning.message}</Text>)}</View>}
+      {!!visibleWarnings.length&&<View style={s.notes}><Text style={s.notesTitle}>{visibleWarnings.length} parser note{visibleWarnings.length===1?"":"s"}</Text><Text style={s.notesCopy}>Only meaningful source/parser notes are shown here. Recognised preliminary items are not warned merely because they have no measured quantity.</Text>{visibleWarnings.slice(0,12).map((warning,index)=><Text key={`${warning.sheet}-${warning.row}-${index}`} style={s.noteLine}>{warning.sheet}{warning.row?` row ${warning.row}`:""}: {warning.message}</Text>)}</View>}
     </>}
   </ScrollView></SafeAreaView>;
 }
@@ -108,7 +117,7 @@ function SectionBlock({section,isOpen,showAll,exceptionIds,rates,preliminariesPr
 function ItemRow({item,rateText,preliminary,onRateChange}:{item:LocalBoqItem;rateText:string;preliminary?:MobilePreliminaryPricing;onRateChange:(value:string)=>void}){
   if(preliminary){
     const diff=Math.abs(preliminary.componentDifference??0)>.05;
-    return <View style={s.item}><View style={s.itemTop}><Text style={s.itemNo}>{item.itemNo||"—"}</Text><Text style={s.itemDesc}>{item.description}</Text></View><Text style={s.prelimBadge}>PRELIMINARY · {preliminary.behaviour.replace("_"," ").toUpperCase()}</Text><View style={s.prelimGrid}><MoneyFact label="Fixed charge" value={preliminary.fixedCharge}/><MoneyFact label="Time-related" value={preliminary.timeRelatedCharge}/><MoneyFact label={preliminary.planningTotalSource==="source"?"Source total":"Planning total"} value={preliminary.planningTotal}/></View>{preliminary.planningTotalSource==="derived"&&<Text style={s.info}>Planning total = Fixed + Time-Related. The two source components remain separate.</Text>}{preliminary.planningTotal==null&&<Text style={s.warning}>No fixed, time-related or source total charge is entered for this preliminary item.</Text>}{diff&&<Text style={s.warning}>Source Total Charges differs from Fixed + Time-Related by {money(preliminary.componentDifference)}. Source values are preserved for review.</Text>}</View>;
+    return <View style={s.item}><View style={s.itemTop}><Text style={s.itemNo}>{item.itemNo||"—"}</Text><Text style={s.itemDesc}>{item.description}</Text></View><Text style={s.prelimBadge}>PRELIMINARY · {preliminary.behaviour.replaceAll("_"," ").toUpperCase()}</Text><View style={s.prelimGrid}><MoneyFact label="Fixed charge" value={preliminary.fixedCharge}/><MoneyFact label="Time-related" value={preliminary.timeRelatedCharge}/><MoneyFact label={preliminary.planningTotalSource==="source"?"Source total":"Planning total"} value={preliminary.planningTotal}/></View>{preliminary.planningTotalSource==="derived"&&<Text style={s.info}>Planning total = Fixed + Time-Related. The two source components remain separate.</Text>}{preliminary.planningTotal==null&&<Text style={s.warning}>No fixed, time-related or source total charge is entered for this preliminary item.</Text>}{diff&&<Text style={s.warning}>Source Total Charges differs from Fixed + Time-Related by {money(preliminary.componentDifference)}. Source values are preserved for review.</Text>}</View>;
   }
   const cleaned=rateText.replace(/[,₦$€£\s]/g,"");const rate=cleaned?Number(cleaned):null;const amount=rate!=null&&Number.isFinite(rate)?item.quantity*rate:null;const mismatch=item.rate!=null&&item.amount!=null&&Math.abs(item.quantity*item.rate-item.amount)>.05;
   return <View style={s.item}><View style={s.itemTop}><Text style={s.itemNo}>{item.itemNo||"—"}</Text><Text style={s.itemDesc}>{item.description}</Text></View><View style={s.itemFacts}><Text style={s.fact}>{qty(item.quantity)} {item.unit}</Text><Text style={s.fact}>Source rate {money(item.rate)}</Text><Text style={[s.fact,mismatch&&s.warnText]}>Source amount {money(item.amount)}</Text></View><View style={s.rateBox}><View style={{flex:1}}><Text style={s.label}>WORKING RATE</Text><TextInput value={rateText} onChangeText={onRateChange} keyboardType="decimal-pad" placeholder="Leave blank if genuinely unpriced" style={s.rateInput}/></View><View style={s.working}><Text style={s.label}>WORKING AMOUNT</Text><Text style={s.workingValue}>{money(amount)}</Text></View></View>{mismatch&&<Text style={s.warning}>Source amount does not equal Quantity × source Rate. The source values remain preserved.</Text>}</View>;
