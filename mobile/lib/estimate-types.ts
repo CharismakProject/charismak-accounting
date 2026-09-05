@@ -1,5 +1,17 @@
 export type MobileEstimateSupply="contractor"|"client"|"specialist"|"labour_only"|"unknown";
 export type MobileWorkingRateSource="imported"|"manual";
+export type MobilePreliminaryBehaviour="fixed"|"time_related"|"mixed"|"unpriced";
+export type MobilePreliminaryTotalSource="source"|"derived"|"unpriced";
+
+export type MobilePreliminaryPricing={
+  fixedCharge:number|null;
+  timeRelatedCharge:number|null;
+  sourceTotalCharges:number|null;
+  planningTotal:number|null;
+  planningTotalSource:MobilePreliminaryTotalSource;
+  behaviour:MobilePreliminaryBehaviour;
+  componentDifference:number|null;
+};
 
 export type MobileEstimateDecision={
   costCode:string;
@@ -34,4 +46,5 @@ export type MobileEstimateReviewSession={
   decisions:Record<string,MobileEstimateDecision>;
   rates:Record<string,string>;
   rateSources?:Record<string,MobileWorkingRateSource>;
+  preliminariesPricing?:Record<string,MobilePreliminaryPricing>;
 };
