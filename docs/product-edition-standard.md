@@ -1,48 +1,39 @@
-# Charismak Accounting — Standard Edition
+# Charismak App Product Edition Standard
 
-## Product position
+## One shared construction truth
 
-The standard product is designed for small and medium construction companies. Large/enterprise deployments use the same accounting core but are treated as custom implementations until sufficient enterprise operating data exists to standardise them safely.
+Different user experiences may simplify or expose more controls, but they must not calculate the same construction item differently without an explicit reviewed assumption.
 
-## Default product rule
+## Estimate standard
 
-The everyday product must optimise for construction work, not accounting terminology.
+Every detailed estimate supports, where relevant:
 
-1. Users add records once through **Add**.
-2. Charismak detects the document type, project relationship and likely financial meaning.
-3. High-confidence, safe actions apply automatically.
-4. Ambiguous or high-impact actions ask for confirmation.
-5. The original evidence and every correction remain auditable.
+- section
+- item/reference
+- description
+- unit
+- quantity
+- imported rate
+- working rate
+- working amount
+- cost group
+- supply responsibility
+- material-recipe family
+- calculation assumptions
+- material source traceability
 
-## Standard navigation
+## Calculation rule
 
-### Mobile
-Home · Projects · Add · Approvals · More
+AI interpretation is advisory. Deterministic functions perform quantity, material, rate and total calculations.
 
-### Web
-Home · Projects · Add · Approvals · Money/Treasury · Reports/More
+A material recipe must expose the assumptions that materially affect the result, such as waste percentage, thickness, mix ratio or conversion basis.
 
-Advanced accounting/reconciliation controls remain available to finance roles without dominating the everyday contractor experience.
+Unsupported or specification-dependent recipes must return a review-required state rather than an invented material quantity.
 
-## Standard company roles
+## Mobile parity
 
-- MD / Owner
-- Accountant / CFO
-- Project Director
-- Project / Construction Manager
+Mobile and web/PWA must provide the same core ability to review a BOQ, change a working rate, calculate supported materials and inspect traceability. Layout may differ to fit the device.
 
-MD/Owner retains company-wide visibility and may act through any role interface. The audit record must preserve the signed-in identity and acting interface.
+## Persistence rule
 
-## Universal intake
-
-The normal user should never need to choose a special upload workflow first. The **Add** intake accepts mixed PDF, Excel/CSV, Word and supported images together and determines whether each item is a statement, invoice, BOQ, quotation, receipt, variation, funding evidence, project report or other record.
-
-## Simplicity target
-
-A competent contractor who has never used Charismak Accounting should be able to create useful company/project financial records within five minutes without training.
-
-If the system can reasonably infer something from existing records, it should not ask the user to enter or classify it again.
-
-## Enterprise/custom edition
-
-The standard codebase keeps the foundations needed for larger deployments, including role permissions, audit, multi-project finance, treasury, approvals, document evidence and project accounting. Enterprise-specific requirements such as group consolidation, ERP integrations, SSO, advanced procurement/subcontract certification, payroll, regional business units and very large project counts are implemented as custom extensions until they are validated with sufficient real-world data.
+Preview calculations are not project budgets or Accounting transactions until the user explicitly saves/converts them through a reviewed persistence flow.

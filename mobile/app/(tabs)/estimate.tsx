@@ -1,0 +1,14 @@
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+export default function EstimateTab(){
+  const router=useRouter();
+  return <SafeAreaView style={s.safe} edges={["top"]}><ScrollView contentContainerStyle={s.page}>
+    <View style={s.hero}><Text style={s.eye}>CHARISMAK APP · ESTIMATE</Text><Text style={s.title}>Use the BOQ you already have</Text><Text style={s.sub}>The current mobile estimate flow does one job first: preserve and review an Excel BOQ reliably. Other estimating methods stay out of the way until they are complete.</Text></View>
+    <Pressable style={s.primary} onPress={()=>router.push("/upload-boq")}><Text style={s.badge}>ACTIVE</Text><Text style={s.cardTitle}>Upload BOQ</Text><Text style={s.cardText}>XLSX, XLS or CSV → preserve sections and primary items → flag unpriced/arithmetic exceptions → continue. No line-by-line classification is required.</Text><Text style={s.cta}>Upload BOQ ›</Text></Pressable>
+    <View style={s.rule}><Text style={s.ruleTitle}>Deliberately not shown yet</Text><Text style={s.ruleCopy}>Quick Estimate, guided measurement, drawing take-off and material/procurement analysis will return only as complete workflows. A half-working button is worse than no button.</Text></View>
+  </ScrollView></SafeAreaView>;
+}
+
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:"#f4f7fa"},page:{padding:16,paddingBottom:90,gap:14},hero:{backgroundColor:"#082945",borderRadius:20,padding:20,gap:8},eye:{fontSize:10,fontWeight:"900",letterSpacing:1.3,color:"#9ec5df",fontFamily:"sans-serif"},title:{fontSize:27,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"},sub:{fontSize:13,lineHeight:20,color:"#d7e5ef",fontFamily:"sans-serif"},primary:{backgroundColor:"#fff",borderWidth:2,borderColor:"#0b668f",borderRadius:18,padding:18},badge:{alignSelf:"flex-start",fontSize:10,fontWeight:"900",color:"#087450",backgroundColor:"#e3f5ed",paddingHorizontal:9,paddingVertical:5,borderRadius:999,fontFamily:"sans-serif"},cardTitle:{fontSize:20,fontWeight:"900",color:"#14354d",marginTop:10,fontFamily:"sans-serif"},cardText:{fontSize:13,lineHeight:20,color:"#617687",marginTop:7,fontFamily:"sans-serif"},cta:{fontSize:13,fontWeight:"900",color:"#087450",marginTop:14,fontFamily:"sans-serif"},rule:{backgroundColor:"#fff8e8",borderWidth:1,borderColor:"#ecd9a7",borderRadius:16,padding:15},ruleTitle:{fontSize:14,fontWeight:"900",color:"#55451d",fontFamily:"sans-serif"},ruleCopy:{fontSize:12,lineHeight:19,color:"#74694f",marginTop:5,fontFamily:"sans-serif"}});

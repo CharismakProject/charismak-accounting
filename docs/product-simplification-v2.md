@@ -1,44 +1,60 @@
-# Product Simplification V2
+# Charismak App Product Simplification V2
 
-Core product rule: the contractor should provide normal project records; Charismak should interpret them before asking questions.
+The product should feel simple even when the underlying construction/accounting logic is sophisticated.
 
-## Everyday navigation
+## Main navigation
 
-Home · Projects · Add · Approvals · More
+**Home · Estimate · Projects · Money · More**
 
-`Add` is the universal intake for bank statements, invoices, BOQs, quotations, receipts, fund records and project evidence. Statement-specific upload remains an advanced finance path only.
+Users should not be forced through technical database/accounting terminology.
 
-## Intelligence rule
+## Estimate workflow
 
-Target behaviour: 80% automatic, 15% confirmation, 5% manual/advanced.
+The primary detailed-estimate path is:
 
-High-confidence non-destructive interpretations may be applied automatically. Ambiguous project matches, conflicting base contracts and other materially uncertain changes remain in review.
+**Upload/Create → Review → Rates → Materials → Summary → Create Project**
 
-The intake service owns this decision so web and native clients behave identically. A confidently understood commercial document is applied to the project automatically; a conflict or uncertain relationship becomes one clear confirmation rather than a group of accounting fields.
+### Upload/Create
 
-## Project commercial truth
+Accept the user's existing BOQ structure rather than forcing one house format. Column names/order may vary.
 
-Keep separate:
-- base/original scope
-- additional/new scope
-- variations
-- client invoices
-- approved commercial value
-- identified commercial value
-- internal cost budget
+### Review
 
-A standalone additional-work document must not replace the base contract.
+Preserve sections and highlight only items that genuinely need correction. Allow bulk confirmation at section level.
 
-## Mobile
+### Rates
 
-The native Expo app is not a WebView. It shares Supabase authentication, permissions, audit history, projects and the document-intelligence backend with the web app, while using a native five-tab mobile interface.
+Keep imported/user rates until deliberately changed. Reference ranges advise; they do not silently replace rates.
 
-## Company-owned output
+### Materials
 
-Company identity is captured once during onboarding: display and legal names, logo, letterhead artwork, registration and tax details, contact information, report colours and an optional footer note. Owners can update the same settings from web or native mobile.
+The user should be able to tap a BOQ quantity to understand the material breakdown behind it.
 
-Client-facing reports use the construction company's identity. Charismak may power the financial record, but it must not place its own visible brand on a contractor's printed or PDF report.
+The material summary must also work backwards: tap a material total to see the BOQ items that produced it.
 
-## Initial market boundary
+Only confirmed deterministic recipes calculate. Unknown/specification-dependent items remain clearly marked for review.
 
-The self-serve product is intentionally designed for small and medium construction companies. Enterprise-scale controls remain possible in the shared architecture but are activated only as a custom edition. Enterprise options must never add screens, terminology or setup work to a standard workspace.
+### Summary
+
+Keep commercial totals understandable and separate:
+
+- Direct Cost
+- Contingency
+- Overhead
+- Profit
+- Tax/VAT where applicable
+- Client Price
+
+Do not collapse profit or VAT into internal project cost.
+
+### Create Project
+
+Project conversion is explicit, not automatic. It creates a reviewed expected-cost baseline that can later be compared with Money/actuals.
+
+## Mobile-first rule
+
+Every important estimate action must remain practical on a phone. Large tables can adapt into compact item cards, but mobile must not become a reduced read-only edition.
+
+## AI rule
+
+AI may interpret, classify and suggest. Deterministic engines calculate. The user confirms financial/material effects.

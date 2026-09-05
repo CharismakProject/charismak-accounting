@@ -1,28 +1,67 @@
 import { supabase } from "./supabase";
 
 export type RoleFamily="md_owner"|"accountant_cfo"|"project_director"|"project_manager";
-export const allRoles:RoleFamily[]=["md_owner","accountant_cfo","project_director","project_manager"];
+
+const roleFamilyFromLiveRole=(role:string):RoleFamily=>{
+  if(role==="accountant")return "accountant_cfo";
+  if(role==="pm")return "project_manager";
+  return "md_owner";
+};
+
+export async function hasActiveWorkspace(){
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user)return false;
+  const {data,error}=await supabase.from("company_members").select("id").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
+  if(error)throw error;
+  return !!data;
+}
+
+export async function createWorkspace(companyName:string){
+  const name=companyName.trim();
+  if(name.length<2)throw new Error("Enter your company or business name.");
+  if(await hasActiveWorkspace())return;
+  const {error}=await supabase.rpc("create_company",{company_name:name,operating_mode:"single_user"});
+  if(error)throw error;
+}
 
 export async function loadWorkspace(){
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)throw new Error("Not signed in");
-  const {data:membership,error}=await supabase.from("company_memberships").select("id,company_id,is_owner,status").eq("user_id",user.id).eq("status","active").limit(1).maybeSingle();
-  if(error||!membership)throw new Error(error?.message||"No active company workspace");
-  const [{data:positions},{data:preference},{data:assignments},{data:company}]=await Promise.all([
-    supabase.from("membership_positions").select("is_primary,position:positions(name,interface_family)").eq("membership_id",membership.id),
-    supabase.from("user_interface_preferences").select("active_interface").eq("company_id",membership.company_id).eq("user_id",user.id).maybeSingle(),
-    supabase.from("project_assignments").select("project_id").eq("membership_id",membership.id),
-    supabase.from("companies").select("name").eq("id",membership.company_id).maybeSingle(),
+
+  // V0.1 compatibility rule: the connected Accounting database is authoritative.
+  // Production currently uses public.company_members, not the newer review-only
+  // company_memberships / membership_positions model.
+  const {data:member,error}=await supabase
+    .from("company_members")
+    .select("id,company_id,role,status,is_primary_accountant")
+    .eq("user_id",user.id)
+    .eq("status","active")
+    .limit(1)
+    .maybeSingle();
+  if(error||!member)throw new Error(error?.message||"No active company workspace");
+
+  const [{data:assignments},{data:company}]=await Promise.all([
+    supabase.from("project_assignments").select("project_id").eq("company_member_id",member.id).is("unassigned_at",null),
+    supabase.from("companies").select("name").eq("id",member.company_id).maybeSingle(),
   ]);
-  const families=Array.from(new Set((positions??[]).map((r:any)=>r.position?.interface_family).filter(Boolean))) as RoleFamily[];
-  const roles=membership.is_owner?allRoles:(families.length?families:["project_manager"] as RoleFamily[]);
-  const preferred=preference?.active_interface as RoleFamily|undefined;
-  const activeRole=preferred&&roles.includes(preferred)?preferred:(membership.is_owner?"md_owner":roles[0]);
+
+  const activeRole=roleFamilyFromLiveRole(String(member.role||"md"));
   const projectIds=Array.from(new Set((assignments??[]).map((a:any)=>a.project_id).filter(Boolean))) as string[];
-  return{user,membership,companyName:company?.name||"Company",roles,activeRole,assignedProjectIds:projectIds};
+  const membership={...member,is_owner:member.role==="md"};
+
+  return{
+    user,
+    membership,
+    companyName:company?.name||"Company",
+    roles:[activeRole] as RoleFamily[],
+    activeRole,
+    assignedProjectIds:projectIds,
+  };
 }
 
-export async function switchRole(companyId:string,role:RoleFamily){
-  const {error}=await supabase.rpc("set_active_interface",{target_company:companyId,target_interface:role});
-  if(error)throw error;
+export async function switchRole(_companyId:string,_role:RoleFamily){
+  // The live V0.1 Accounting schema exposes one authoritative company role per
+  // member. Multi-position interface switching belongs to the gated schema and
+  // must not be called until those migrations are explicitly approved.
+  return;
 }

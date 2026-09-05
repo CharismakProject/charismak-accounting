@@ -7,9 +7,24 @@ on:
       - 'mobile/**'
       - '.github/workflows/build-mobile-apk.yml'
 
+concurrency:
+  group: build-android-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: https://ivanfdioaplmajnaqxnf.supabase.co
+      EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_FNFpnKnLfvvDlOIwaWlikg_naH6bM3I
+      EXPO_PUBLIC_PROJECT_COST_BRIDGE_ENABLED: 'false'
+      EXPO_PUBLIC_PROJECT_COST_FORECAST_ENABLED: 'false'
+      EXPO_PUBLIC_PROJECT_COST_PAYMENT_LINK_ENABLED: 'false'
+      EXPO_PUBLIC_PROJECT_PROGRESS_VALUATION_ENABLED: 'false'
+      EXPO_PUBLIC_PROJECT_PROGRESS_FIELD_REVIEW_ENABLED: 'false'
+      ORG_GRADLE_PROJECT_reactNativeArchitectures: arm64-v8a
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.vfs.watch=false
     defaults:
       run:
         working-directory: mobile
@@ -21,12 +36,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
 
       - name: Install dependencies
         run: npm install
@@ -37,13 +48,41 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --non-interactive --no-install
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
       - name: Build standalone internal-test APK
-        run: cd android && chmod +x gradlew && ./gradlew assembleRelease --no-daemon
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -o pipefail
+          cd android
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease \
+            --no-daemon \
+            --build-cache \
+            --max-workers=2 \
+            --console=plain \
+            --stacktrace \
+            --info 2>&1 | tee ../gradle-build.log
+
+      - name: Upload Gradle diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Charismak-Android-Gradle-Log
+          path: mobile/gradle-build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: charismak-accounting-android-test
+          name: Charismak-App-Android-Test
           path: mobile/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 14
