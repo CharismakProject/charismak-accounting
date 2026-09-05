@@ -40,7 +40,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install native dependencies
-        run: npm ci --no-audit --no-fund
+      - name: Install pinned native dependencies
+        # The committed mobile lock predates the PDF/share additions. All direct
+        # versions in package.json are pinned; use the manifest until that lock is regenerated.
+        run: npm install --no-audit --no-fund
       - name: Native type check
         run: npm run typecheck

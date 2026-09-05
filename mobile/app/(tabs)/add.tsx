@@ -1,33 +1,36 @@
-import { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import * as DocumentPicker from "expo-document-picker";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { sha256 } from "js-sha256";
-import { supabase } from "../../lib/supabase";
-import { loadWorkspace } from "../../lib/workspace";
 import { Card, ScreenTitle, baseStyles as b } from "../../components/ui";
 
-type Picked=DocumentPicker.DocumentPickerAsset;
-type Result={name:string;state:"done"|"review"|"failed"|"duplicate"|"processing";message:string;type?:string};
-const safe=(n:string)=>n.replace(/[^a-zA-Z0-9._-]/g,"_");
+const UNIVERSAL_INTAKE_ENABLED=process.env.EXPO_PUBLIC_UNIVERSAL_INTAKE_ENABLED==="true";
 
 export default function Add(){
   const {projectId}=useLocalSearchParams<{projectId?:string}>();
-  const [files,setFiles]=useState<Picked[]>([]);const [results,setResults]=useState<Result[]>([]);const [busy,setBusy]=useState(false);const [summary,setSummary]=useState("");
-  async function choose(){const r=await DocumentPicker.getDocumentAsync({multiple:true,copyToCacheDirectory:true,type:["application/pdf","text/csv","application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","application/vnd.openxmlformats-officedocument.wordprocessingml.document","image/*"]});if(!r.canceled)setFiles(r.assets)}
-  function update(i:number,p:Partial<Result>){setResults(x=>x.map((r,n)=>n===i?{...r,...p}:r))}
-  async function process(){if(!files.length||busy)return;setBusy(true);setResults(files.map(f=>({name:f.name,state:"processing",message:"Waiting…"})));setSummary("");try{const w=await loadWorkspace();const {data:batch,error:be}=await supabase.from("intake_batches").insert({company_id:w.membership.company_id,created_by:w.user.id,total_files:files.length}).select("id").single();if(be||!batch)throw new Error(be?.message||"Could not start upload");let done=0,review=0,failed=0,dupes=0;for(let i=0;i<files.length;i++){const f=files[i];try{update(i,{message:"Reading file…"});const response=await fetch(f.uri);const ab=await response.arrayBuffer();const bytes=new Uint8Array(ab);if(bytes.length>20*1024*1024)throw new Error("File is over 20 MB");const hash=sha256(bytes);const {data:dupe}=await supabase.from("source_documents").select("id").eq("company_id",w.membership.company_id).eq("file_hash",hash).limit(1).maybeSingle();if(dupe){dupes++;update(i,{state:"duplicate",message:"Already uploaded. Nothing counted twice."});continue}const ext=(f.name.split(".").pop()||"").toLowerCase();const path=`${w.membership.company_id}/intake/mobile/${Date.now()}-${safe(f.name)}`;update(i,{message:"Uploading securely…"});const {error:se}=await supabase.storage.from("universal-intake").upload(path,ab,{contentType:f.mimeType||undefined,upsert:false});if(se)throw se;const {data:doc,error:de}=await supabase.from("source_documents").insert({company_id:w.membership.company_id,project_id:projectId||null,document_type:"other",file_name:f.name,storage_path:path,file_hash:hash,metadata:{bucket:"universal-intake",extension:ext,mime_type:f.mimeType||null,original_size:bytes.length,upload_method:"native_mobile",intake_project_hint:projectId||null},uploaded_by:w.user.id}).select("id").single();if(de||!doc)throw new Error(de?.message||"Could not register file");const {error:ie}=await supabase.from("intake_items").insert({batch_id:batch.id,company_id:w.membership.company_id,document_id:doc.id,detected_project_id:projectId||null});if(ie)throw ie;update(i,{message:"Understanding document…"});const {data:a,error:ae}=await supabase.functions.invoke("analyse-intake-document",{body:{documentId:doc.id,batchId:batch.id}});if(ae)throw ae;
 
-      if(a?.statementImportId&&a?.status==="applied"){done++;update(i,{state:"done",type:"bank statement",message:a?.message||"Statement understood and processed."});continue}
-      if(a?.projectId&&a?.status==="ready"){
-        update(i,{message:"Project understood. Applying safe interpretation…"});
-        const {data:applied,error:applyError}=await supabase.functions.invoke("auto-apply-project-document",{body:{documentId:doc.id,projectId:a.projectId}});
-        if(!applyError&&applied?.applied){done++;const meaning=String(applied?.commercialRole&&applied.commercialRole!=="none"?applied.commercialRole:applied?.effect||"project evidence").replaceAll("_"," ");update(i,{state:"done",type:String(a?.type||"document").replaceAll("_"," "),message:`Understood and added automatically as ${meaning}.`});continue}
-        review++;update(i,{state:"review",type:String(a?.type||"document").replaceAll("_"," "),message:applied?.reason==="existing_base_scope"?"I found an existing base contract. Confirm how this new commercial document relates to it.":"I know the project, but need one confirmation before changing the official record."});continue
-      }
+  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content}>
+    <ScreenTitle eyebrow="ADD" title={projectId?"Add to this project":"Give Charismak your records"} subtitle="General document intelligence needs its reviewed backend tables before it can safely organise files into Accounting."/>
 
-      const needs=a?.status==="needs_review";if(needs)review++;else done++;update(i,{state:needs?"review":"done",type:String(a?.type||"document").replaceAll("_"," "),message:a?.message||(needs?"Needs one confirmation.":"Processed automatically.")})}catch(e){failed++;update(i,{state:"failed",message:e instanceof Error?e.message:"Upload failed"})}}await supabase.from("intake_batches").update({processed_files:done+review+dupes,needs_review_count:review,status:failed===files.length?"failed":review?"needs_review":"completed",summary:{processed:done,needs_review:review,duplicates:dupes,failed}}).eq("id",batch.id);setSummary(`${done} organised automatically · ${review} need your decision · ${dupes} already known · ${failed} failed`)}catch(e){Alert.alert("Could not process files",e instanceof Error?e.message:"Please try again")}finally{setBusy(false)}}
-  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content}><ScreenTitle eyebrow="ADD" title={projectId?"Add to this project":"Give Charismak your records"} subtitle={projectId?"These files are already linked to the project. Charismak will still decide whether each one is a BOQ, invoice, variation, receipt, funding record or other evidence.":"Select what you already use. Charismak decides what each file is, where it belongs and what it should update."}/>{projectId&&<View style={s.projectHint}><Text style={{fontSize:8,fontWeight:"900",color:"#08704e"}}>PROJECT SELECTED</Text><Text style={{fontSize:10,color:"#54766a",marginTop:2}}>Files will be kept inside this project workspace.</Text></View>}<Pressable style={s.drop} onPress={choose}><Text style={s.plus}>＋</Text><Text style={s.dropTitle}>{files.length?`${files.length} file${files.length===1?"":"s"} selected`:"Choose files"}</Text><Text style={s.dropCopy}>PDF · Excel · CSV · Word · images</Text></Pressable>{files.map(f=><View key={f.uri} style={s.file}><Text numberOfLines={1} style={s.fileName}>{f.name}</Text><Text style={s.fileSize}>{((f.size||0)/1024/1024).toFixed(2)} MB</Text></View>)}<Pressable disabled={!files.length||busy} onPress={process} style={[b.button,(!files.length||busy)&&{opacity:.45}]}><Text style={b.buttonText}>{busy?"Understanding your records…":"Add & organise"}</Text></Pressable>{!!summary&&<Text style={s.summary}>{summary}</Text>}{results.map((r,i)=><Card key={`${r.name}-${i}`} style={s.result}><View style={[s.icon,r.state==="done"&&s.good,r.state==="review"&&s.warn,r.state==="failed"&&s.bad]}><Text>{r.state==="done"?"✓":r.state==="review"?"?":r.state==="duplicate"?"↺":r.state==="failed"?"!":"…"}</Text></View><View style={{flex:1}}><Text numberOfLines={1} style={s.resultName}>{r.name}</Text>{r.type&&<Text style={s.type}>{r.type.toUpperCase()}</Text>}<Text style={s.message}>{r.message}</Text></View></Card>)}</ScrollView></SafeAreaView>
+    {!UNIVERSAL_INTAKE_ENABLED&&<Card style={s.notice}>
+      <Text style={s.noticeEye}>INTERNAL TEST · BACKEND GATE OFF</Text>
+      <Text style={s.noticeTitle}>General file intake is not enabled yet</Text>
+      <Text style={s.noticeCopy}>PDF, Word, receipt, statement and image intake will be enabled only after the document-intelligence backend is explicitly reviewed and migrated. This build will not pretend to process those files or write partial records.</Text>
+    </Card>}
+
+    <Pressable style={s.primary} onPress={()=>router.push("/upload-boq")}>
+      <Text style={s.primaryTitle}>Upload a BOQ</Text>
+      <Text style={s.primaryCopy}>XLSX · XLS · CSV · section detection · review · rates · materials</Text>
+      <Text style={s.chevron}>›</Text>
+    </Pressable>
+
+    <Card>
+      <Text style={s.cardTitle}>Why this is separated</Text>
+      <Text style={s.cardCopy}>BOQ parsing already has a bounded preview path. Universal records require source-document, intake and review tables that are not present in the current live Accounting schema. Those migrations remain intentionally unapplied during V0.1 phone testing.</Text>
+    </Card>
+
+    <View style={s.statusRow}><Text style={s.statusLabel}>BOQ upload</Text><Text style={s.ready}>READY TO TEST</Text></View>
+    <View style={s.statusRow}><Text style={s.statusLabel}>PDF / receipt / statement organiser</Text><Text style={s.gated}>GATED</Text></View>
+  </ScrollView></SafeAreaView>;
 }
-const s=StyleSheet.create({projectHint:{borderRadius:13,backgroundColor:"#e7f5ef",padding:11},drop:{minHeight:155,borderWidth:1.5,borderStyle:"dashed",borderColor:"#a9c0d1",borderRadius:20,backgroundColor:"#f8fbfd",alignItems:"center",justifyContent:"center",padding:20},plus:{fontSize:36,color:"#0b5e8d"},dropTitle:{fontSize:18,fontWeight:"900",color:"#123a58",marginTop:3},dropCopy:{fontSize:10,color:"#7c8c99",marginTop:4},file:{flexDirection:"row",justifyContent:"space-between",gap:10,backgroundColor:"white",borderRadius:12,padding:11,borderWidth:1,borderColor:"#e0e7ec"},fileName:{flex:1,fontSize:11,fontWeight:"700",color:"#29475c"},fileSize:{fontSize:9,color:"#82909b"},summary:{fontSize:11,color:"#5a7080",fontWeight:"700"},result:{flexDirection:"row",alignItems:"center",gap:11},icon:{width:38,height:38,borderRadius:12,backgroundColor:"#eef3f6",alignItems:"center",justifyContent:"center"},good:{backgroundColor:"#e4f5ed"},warn:{backgroundColor:"#fff0c9"},bad:{backgroundColor:"#ffe7e5"},resultName:{fontSize:12,fontWeight:"800",color:"#17384f"},type:{fontSize:8,fontWeight:"900",color:"#0a8a63",marginTop:3},message:{fontSize:10,color:"#6e8190",marginTop:3,lineHeight:14}});
+
+const s=StyleSheet.create({notice:{backgroundColor:"#fff8e8",borderColor:"#ecd9a7"},noticeEye:{fontSize:8,fontWeight:"900",letterSpacing:1,color:"#866416"},noticeTitle:{fontSize:16,fontWeight:"900",color:"#4e411f",marginTop:4},noticeCopy:{fontSize:11,lineHeight:17,color:"#6e644b",marginTop:6},primary:{position:"relative",backgroundColor:"#073f65",borderRadius:18,padding:17,paddingRight:42},primaryTitle:{fontSize:17,fontWeight:"900",color:"#fff"},primaryCopy:{fontSize:10,lineHeight:15,color:"#c8dce9",marginTop:5},chevron:{position:"absolute",right:17,top:23,fontSize:28,color:"#d8e7f0"},cardTitle:{fontSize:14,fontWeight:"900",color:"#173b55"},cardCopy:{fontSize:10,lineHeight:16,color:"#708391",marginTop:5},statusRow:{flexDirection:"row",alignItems:"center",justifyContent:"space-between",paddingVertical:11,borderBottomWidth:1,borderBottomColor:"#dfe7ec"},statusLabel:{fontSize:11,fontWeight:"700",color:"#405e72",flex:1},ready:{fontSize:8,fontWeight:"900",color:"#087450"},gated:{fontSize:8,fontWeight:"900",color:"#866416"}});

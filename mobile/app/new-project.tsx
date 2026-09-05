@@ -6,18 +6,87 @@ import { supabase } from "../lib/supabase";
 import { loadWorkspace } from "../lib/workspace";
 import { baseStyles as b, Card, ScreenTitle } from "../components/ui";
 
-const num=(v:string)=>{const n=Number(v.replace(/,/g,""));return Number.isFinite(n)&&v.trim()!==""?n:null};
-const norm=(v:string)=>v.trim().toLowerCase().replace(/\s+/g," ");
+const uniqueKeywords=(values:string[])=>Array.from(new Set(values.map(v=>v.trim()).filter(Boolean)));
+
+function newProjectId(){
+  const cryptoObject=(globalThis as typeof globalThis&{crypto?:{randomUUID?:()=>string}}).crypto;
+  if(cryptoObject?.randomUUID)return cryptoObject.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,(char)=>{
+    const random=Math.floor(Math.random()*16);
+    const value=char==="x"?random:(random&0x3)|0x8;
+    return value.toString(16);
+  });
+}
+
+function errorMessage(error:unknown){
+  if(error instanceof Error&&error.message)return error.message;
+  if(error&&typeof error==="object"&&"message" in error){
+    const message=String((error as {message?:unknown}).message??"").trim();
+    if(message)return message;
+  }
+  return "Please try again.";
+}
 
 export default function NewProject(){
-  const [code,setCode]=useState("");const [name,setName]=useState("");const [client,setClient]=useState("");const [location,setLocation]=useState("");const [type,setType]=useState("");const [contract,setContract]=useState("");const [budget,setBudget]=useState("");const [aliases,setAliases]=useState("");const [busy,setBusy]=useState(false);
-  async function create(){if(!code.trim()||!name.trim())return Alert.alert("Project details","Project code and project name are required.");setBusy(true);try{const w=await loadWorkspace();let clientId:string|null=null;const clientName=client.trim();if(clientName){const {data:c,error}=await supabase.from("clients").upsert({company_id:w.membership.company_id,name:clientName},{onConflict:"company_id,name"}).select("id").single();if(error)throw error;clientId=c.id}
-    const contractValue=num(contract),internalBudget=num(budget);const projectCode=code.trim().toUpperCase();const projectName=name.trim();const {data:p,error}=await supabase.from("projects").insert({company_id:w.membership.company_id,client_id:clientId,project_code:projectCode,name:projectName,project_type:type.trim()||null,location:location.trim()||null,status:"active",contract_value:contractValue,internal_cost_budget:internalBudget,progress_percent:0,aliases:Array.from(new Set([projectName,...aliases.split(",")].map(x=>x.trim()).filter(Boolean))),created_by:w.user.id,updated_by:w.user.id}).select("id").single();if(error)throw error;
-    const expected=contractValue??0,original=internalBudget??0;const {error:summaryError}=await supabase.from("project_financial_summaries").insert({project_id:p.id,original_budget:original,revised_budget:original,expected_contract_revenue:expected,forecast_final_cost:original,forecast_cost_to_complete:original,forecast_profit:expected-original});if(summaryError)throw summaryError;
-    if(clientName){const normalized=norm(clientName);await supabase.from("project_relationships").upsert({company_id:w.membership.company_id,project_id:p.id,relationship_type:"client",display_name:clientName,normalized_name:normalized,match_terms:Array.from(new Set([clientName.toLowerCase(),normalized])),required_terms:[],excluded_terms:[],direction_rule:"credit",default_classification:"project_funding",default_category:null,confidence:96,source:"project_client_profile",is_active:true,created_by:w.user.id,updated_at:new Date().toISOString()},{onConflict:"project_id,relationship_type,normalized_name"})}
-    router.replace({pathname:"/project/[id]",params:{id:p.id}});
-  }catch(e){Alert.alert("Could not create project",e instanceof Error?e.message:"Please try again.")}finally{setBusy(false)}}
-  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content} keyboardShouldPersistTaps="handled"><ScreenTitle eyebrow="NEW PROJECT" title="Start a project" subtitle="Enter what you know now. Documents and money activity can fill the rest as the project develops."/><Card style={s.form}><Field label="Project code" value={code} onChange={setCode} placeholder="e.g. JAHI-01"/><Field label="Project name" value={name} onChange={setName} placeholder="Project name"/><Field label="Client / managed company" value={client} onChange={setClient} placeholder="Client or company"/><Field label="Location" value={location} onChange={setLocation} placeholder="Area / city"/><Field label="Project type" value={type} onChange={setType} placeholder="Residential, fit-out, civil…"/><Field label="Contract / client value" value={contract} onChange={setContract} placeholder="Optional" keyboard="numeric"/><Field label="Internal cost budget" value={budget} onChange={setBudget} placeholder="Optional" keyboard="numeric"/><Field label="Aliases / keywords" value={aliases} onChange={setAliases} placeholder="Jahi, client tag, bank narration keyword"/><Text style={s.help}>You do not need a BOQ to create a project. Add statements, invoices, funding records or other documents later and Charismak will build the project record progressively.</Text><Pressable disabled={busy} onPress={create} style={[s.button,busy&&{opacity:.55}]}><Text style={s.buttonText}>{busy?"Creating project…":"Create project"}</Text></Pressable></Card></ScrollView></SafeAreaView>
+  const [name,setName]=useState("");
+  const [location,setLocation]=useState("");
+  const [code,setCode]=useState("");
+  const [client,setClient]=useState("");
+  const [busy,setBusy]=useState(false);
+
+  async function create(){
+    if(!name.trim()||!location.trim())return Alert.alert("Project details","Project name and location are required.");
+    setBusy(true);
+    try{
+      const w=await loadWorkspace();
+      const role=String(w.membership.role||"").toLowerCase();
+      if(role!=="md"&&role!=="owner")throw new Error("Only the MD can create a live project right now.");
+      const projectName=name.trim();
+      const projectCode=code.trim().toUpperCase()||null;
+      const clientName=client.trim()||null;
+      const projectLocation=location.trim();
+      const projectId=newProjectId();
+
+      // Do not chain .select()/RETURNING here. The live projects INSERT policy
+      // is valid for MDs, while INSERT ... RETURNING also forces the new row
+      // through the SELECT RLS policy in the same request and can reject the
+      // otherwise-valid insert. We already know the UUID, so RETURNING is not
+      // necessary.
+      const {error}=await supabase.from("projects").insert({
+        id:projectId,
+        company_id:w.membership.company_id,
+        project_code:projectCode,
+        name:projectName,
+        location:projectLocation,
+        status:"active",
+        reported_progress:0,
+        created_by:w.user.id,
+        client_name:clientName,
+        import_keywords:uniqueKeywords([projectName,projectCode||"",clientName||""])
+      });
+      if(error)throw error;
+      router.replace({pathname:"/project/[id]",params:{id:projectId}});
+    }catch(error){Alert.alert("Could not create project",errorMessage(error));}
+    finally{setBusy(false);}
+  }
+
+  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content} keyboardShouldPersistTaps="handled">
+    <ScreenTitle eyebrow="NEW PROJECT" title="Start with the job" subtitle="Only enter what identifies the project. BOQ, contract value, budget and money records come later when their source is available."/>
+    <Card style={s.form}>
+      <Field label="Project name" value={name} onChange={setName} placeholder="e.g. Jahi Residence" required/>
+      <Field label="Location" value={location} onChange={setLocation} placeholder="e.g. Jahi, Abuja" required/>
+      <Field label="Project code" value={code} onChange={setCode} placeholder="Optional, e.g. JAHI-01" caps/>
+      <Field label="Client" value={client} onChange={setClient} placeholder="Optional"/>
+      <View style={s.note}><Text style={s.noteTitle}>That is enough to start.</Text><Text style={s.noteCopy}>After creation, open the project and upload its BOQ. Charismak will keep the source bill separate from Money and from later procurement decisions.</Text></View>
+      <Pressable disabled={busy} onPress={create} style={[s.button,busy&&s.disabled]}><Text style={s.buttonText}>{busy?"Creating…":"Create project"}</Text></Pressable>
+    </Card>
+  </ScrollView></SafeAreaView>;
 }
-function Field({label,value,onChange,placeholder,keyboard}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;keyboard?:"numeric"}){return <View style={s.field}><Text style={s.label}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={keyboard} autoCapitalize={label.includes("code")?"characters":"sentences"} style={s.input}/></View>}
-const s=StyleSheet.create({form:{gap:12},field:{gap:5},label:{fontSize:9,fontWeight:"900",color:"#4a6273"},input:{height:44,borderWidth:1,borderColor:"#d8e3ea",borderRadius:12,paddingHorizontal:11,fontSize:11,color:"#183a52",backgroundColor:"#fff"},help:{fontSize:9,lineHeight:14,color:"#718692",backgroundColor:"#f3f7f9",padding:10,borderRadius:10},button:{height:48,borderRadius:14,backgroundColor:"#073f65",alignItems:"center",justifyContent:"center"},buttonText:{fontSize:12,fontWeight:"900",color:"white"}});
+
+function Field({label,value,onChange,placeholder,required,caps}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;required?:boolean;caps?:boolean}){
+  return <View style={s.field}><Text style={s.label}>{label}{required?" *":""}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} autoCapitalize={caps?"characters":"words"} style={s.input}/></View>;
+}
+
+const s=StyleSheet.create({
+  form:{gap:16},field:{gap:7},label:{fontSize:13,fontWeight:"800",color:"#3e5a6d",fontFamily:"sans-serif"},input:{minHeight:54,borderWidth:1,borderColor:"#cfdae2",borderRadius:14,paddingHorizontal:14,fontSize:16,color:"#173f5a",backgroundColor:"#fff",fontFamily:"sans-serif"},note:{backgroundColor:"#f1f7fa",borderRadius:14,padding:14},noteTitle:{fontSize:14,fontWeight:"900",color:"#173f5a",fontFamily:"sans-serif"},noteCopy:{fontSize:13,lineHeight:20,color:"#627987",marginTop:4,fontFamily:"sans-serif"},button:{height:54,borderRadius:14,backgroundColor:"#073f65",alignItems:"center",justifyContent:"center"},buttonText:{fontSize:15,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"},disabled:{opacity:.5}
+});

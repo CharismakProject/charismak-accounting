@@ -11,9 +11,6 @@ const allRoles:RoleFamily[]=["md_owner","accountant_cfo","project_director","pro
 const moreItems = [
   ["Needs your decision", "/review"],
   ["Documents", "/documents"],
-  ["Money & Treasury", "/treasury"],
-  ["Accounting Control", "/accounting"],
-  ["Money Activity", "/statements"],
   ["Notifications", "/notifications"],
   ["Reports", "/reports"],
 ] as const;
@@ -69,18 +66,18 @@ export default function MobileMenu() {
   return <>
     <nav className="mobile-bottom-nav" aria-label="Main navigation">
       <Link href="/" className={active("/") ? "active" : ""}><span>⌂</span><b>Home</b></Link>
+      <Link href="/estimate" className={active("/estimate") ? "active" : ""}><span>▤</span><b>Estimate</b></Link>
       <Link href="/projects" className={active("/projects") ? "active" : ""}><span>▦</span><b>Projects</b></Link>
-      <Link href="/add" className={`mobile-add-tab ${active("/add") ? "active" : ""}`}><span>＋</span><b>Add</b></Link>
-      <Link href="/approvals" className={active("/approvals") ? "active" : ""}><span>✓</span><b>Approvals</b></Link>
+      <Link href="/money" className={active("/money") ? "active" : ""}><span>₦</span><b>Money</b></Link>
       <button type="button" className={open ? "active" : ""} onClick={() => setOpen(v => !v)}><span>•••</span><b>More</b></button>
     </nav>
 
     {open && <button className="mobile-menu-backdrop" aria-label="Close menu" onClick={() => setOpen(false)} />}
     <aside className={`mobile-menu-drawer compact-drawer ${open ? "open" : ""}`} aria-hidden={!open}>
-      <div className="mobile-menu-head"><div><small>CHARISMAK</small><b>More</b></div><button type="button" aria-label="Close menu" onClick={() => setOpen(false)}>×</button></div>
+      <div className="mobile-menu-head"><div><small>CHARISMAK APP</small><b>More</b></div><button type="button" aria-label="Close menu" onClick={() => setOpen(false)}>×</button></div>
       {roles.length>1&&<section className="mobile-acting-as"><small>ACTING AS</small><strong>{roleLabel[activeRole]}</strong><div>{roles.map(role=><button key={role} type="button" disabled={roleBusy} className={activeRole===role?"active":""} onClick={()=>changeRole(role)}>{roleLabel[role]}</button>)}</div></section>}
       <nav>{secondary.map(([text,href]) => <Link key={href} href={href} className={active(href) ? "active" : ""}>{text}<span>›</span></Link>)}</nav>
-      <p>Advanced tools stay here so everyday project finance stays simple.</p>
+      <p>Estimate, Projects and Money stay first-class. Advanced tools stay here until Market and Ask Charismak mature into their own modules.</p>
     </aside>
   </>;
 }
