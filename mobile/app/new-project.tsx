@@ -8,6 +8,25 @@ import { baseStyles as b, Card, ScreenTitle } from "../components/ui";
 
 const uniqueKeywords=(values:string[])=>Array.from(new Set(values.map(v=>v.trim()).filter(Boolean)));
 
+function newProjectId(){
+  const cryptoObject=(globalThis as typeof globalThis&{crypto?:{randomUUID?:()=>string}}).crypto;
+  if(cryptoObject?.randomUUID)return cryptoObject.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,(char)=>{
+    const random=Math.floor(Math.random()*16);
+    const value=char==="x"?random:(random&0x3)|0x8;
+    return value.toString(16);
+  });
+}
+
+function errorMessage(error:unknown){
+  if(error instanceof Error&&error.message)return error.message;
+  if(error&&typeof error==="object"&&"message" in error){
+    const message=String((error as {message?:unknown}).message??"").trim();
+    if(message)return message;
+  }
+  return "Please try again.";
+}
+
 export default function NewProject(){
   const [name,setName]=useState("");
   const [location,setLocation]=useState("");
@@ -26,7 +45,15 @@ export default function NewProject(){
       const projectCode=code.trim().toUpperCase()||null;
       const clientName=client.trim()||null;
       const projectLocation=location.trim();
-      const {data:p,error}=await supabase.from("projects").insert({
+      const projectId=newProjectId();
+
+      // Do not chain .select()/RETURNING here. The live projects INSERT policy
+      // is valid for MDs, while INSERT ... RETURNING also forces the new row
+      // through the SELECT RLS policy in the same request and can reject the
+      // otherwise-valid insert. We already know the UUID, so RETURNING is not
+      // necessary.
+      const {error}=await supabase.from("projects").insert({
+        id:projectId,
         company_id:w.membership.company_id,
         project_code:projectCode,
         name:projectName,
@@ -36,10 +63,10 @@ export default function NewProject(){
         created_by:w.user.id,
         client_name:clientName,
         import_keywords:uniqueKeywords([projectName,projectCode||"",clientName||""])
-      }).select("id").single();
+      });
       if(error)throw error;
-      router.replace({pathname:"/project/[id]",params:{id:p.id}});
-    }catch(e){Alert.alert("Could not create project",e instanceof Error?e.message:"Please try again.");}
+      router.replace({pathname:"/project/[id]",params:{id:projectId}});
+    }catch(error){Alert.alert("Could not create project",errorMessage(error));}
     finally{setBusy(false);}
   }
 
