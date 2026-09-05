@@ -1,17 +1,4 @@
-import type { MobileEstimateBoq } from "./estimate-types.ts";
-
-export type MobilePreliminaryBehaviour="fixed"|"time_related"|"mixed"|"unpriced";
-export type MobilePreliminaryTotalSource="source"|"derived"|"unpriced";
-
-export type MobilePreliminaryPricing={
-  fixedCharge:number|null;
-  timeRelatedCharge:number|null;
-  sourceTotalCharges:number|null;
-  planningTotal:number|null;
-  planningTotalSource:MobilePreliminaryTotalSource;
-  behaviour:MobilePreliminaryBehaviour;
-  componentDifference:number|null;
-};
+import type { MobileEstimateBoq, MobilePreliminaryBehaviour, MobilePreliminaryPricing } from "./estimate-types.ts";
 
 export type PreliminaryWorkbookSheet={name:string;rows:unknown[][]};
 
