@@ -54,10 +54,11 @@ test("native MD route alone can load financial impact and review the field submi
   assert.match(source,/Decline/);
 });
 
-test("native Project workspace exposes PM submission and MD review entries",()=>{
+test("stable native Project workspace does not advertise gated field-progress controls",()=>{
   const project=readFileSync(new URL("../mobile/app/project/[id].tsx",import.meta.url),"utf8");
-  assert.match(project,/project-field-progress/);
-  assert.match(project,/Field Report/);
-  assert.match(project,/project-field-review/);
-  assert.match(project,/MD Field Review/);
+  assert.doesNotMatch(project,/project-field-progress/);
+  assert.doesNotMatch(project,/Field Report/);
+  assert.doesNotMatch(project,/project-field-review/);
+  assert.doesNotMatch(project,/MD Field Review/);
+  assert.match(project,/Upload BOQ/);
 });
