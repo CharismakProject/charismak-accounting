@@ -35,7 +35,7 @@ export default function NewProject(){
         reported_progress:0,
         created_by:w.user.id,
         client_name:clientName,
-        import_keywords:uniqueKeywords([projectName,projectCode||"",clientName||"",projectLocation])
+        import_keywords:uniqueKeywords([projectName,projectCode||"",clientName||""])
       }).select("id").single();
       if(error)throw error;
       router.replace({pathname:"/project/[id]",params:{id:p.id}});
