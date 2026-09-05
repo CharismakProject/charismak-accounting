@@ -1,6 +1,6 @@
 export type MobileEstimateSupply="contractor"|"client"|"specialist"|"labour_only"|"unknown";
 export type MobileWorkingRateSource="imported"|"manual";
-export type MobilePreliminaryBehaviour="fixed"|"time_related"|"mixed"|"unpriced";
+export type MobilePreliminaryBehaviour="fixed"|"time_related"|"mixed"|"total_only"|"unpriced";
 export type MobilePreliminaryTotalSource="source"|"derived"|"unpriced";
 
 export type MobilePreliminaryPricing={
