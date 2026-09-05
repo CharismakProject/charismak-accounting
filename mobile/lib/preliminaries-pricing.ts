@@ -56,7 +56,11 @@ export function extractPreliminaryPricingFromSheets(sheets:PreliminaryWorkbookSh
 
       const componentTotal=fixedCharge==null&&timeRelatedCharge==null?null:(fixedCharge??0)+(timeRelatedCharge??0);
       const planningTotal=sourceTotalCharges??componentTotal;
-      const behaviour:MobilePreliminaryBehaviour=fixedCharge!=null&&timeRelatedCharge!=null?"mixed":fixedCharge!=null?"fixed":timeRelatedCharge!=null?"time_related":"unpriced";
+      const behaviour:MobilePreliminaryBehaviour=
+        fixedCharge!=null&&timeRelatedCharge!=null?"mixed":
+        fixedCharge!=null?"fixed":
+        timeRelatedCharge!=null?"time_related":
+        sourceTotalCharges!=null?"total_only":"unpriced";
       const componentDifference=sourceTotalCharges!=null&&componentTotal!=null?Math.round((sourceTotalCharges-componentTotal)*100)/100:null;
       result[item.id]={
         fixedCharge,timeRelatedCharge,sourceTotalCharges,planningTotal,
