@@ -3,14 +3,14 @@
     "name": "Charismak App",
     "slug": "charismak-app",
     "scheme": "charismak",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "icon": "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": ["expo-router", "expo-document-picker"],
     "android": {
       "package": "com.charismakproject.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png",
         "backgroundColor": "#ffffff"
@@ -18,7 +18,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.charismakproject.app",
-      "buildNumber": "3"
+      "buildNumber": "4"
     },
     "extra": { "router": { "origin": false } }
   }
