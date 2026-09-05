@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { parseBoqLocally, type LocalBoqItem, type LocalBoqParseResult } from "../lib/boq-local-parser";
+import { parseBoqLocally, type LocalBoqItem, type LocalBoqParseResult, type LocalBoqSection } from "../lib/boq-local-parser";
 import { saveEstimateReviewSession } from "../lib/estimate-review-session";
 import type { MobileEstimateDecision, MobileWorkingRateSource } from "../lib/estimate-types";
 import { loadWorkspace } from "../lib/workspace";
@@ -36,7 +36,7 @@ export default function UploadBoq(){
 
   async function parse(){
     if(!file||busy)return;
-    if((file.size||0)>MAX)return Alert.alert("BOQ too large","This mobile preview accepts files up to 12 MB.");
+    if((file.size||0)>MAX){Alert.alert("BOQ too large","This mobile preview accepts files up to 12 MB.");return;}
     setBusy(true);setResult(null);setMessage("Reading the source workbook on this phone…");
     try{
       const response=await fetch(file.uri);const buffer=await response.arrayBuffer();
@@ -53,12 +53,11 @@ export default function UploadBoq(){
   }
 
   const allItems=result?.boq?.sections.flatMap(section=>section.items)??[];
-  const total=allItems.length;
+  const exceptionIds=new Set(allItems.filter(item=>parseRate(rates[item.id]??"")===null||sourceMismatch(item)).map(item=>item.id));
   const unpriced=allItems.filter(item=>parseRate(rates[item.id]??"")===null).length;
   const mismatches=allItems.filter(sourceMismatch).length;
   const sourcePricedTotal=allItems.reduce((sum,item)=>sum+(item.amount??(item.rate==null?0:item.quantity*item.rate)),0);
   const workingTotal=allItems.reduce((sum,item)=>{const rate=parseRate(rates[item.id]??"");return sum+(rate==null?0:item.quantity*rate);},0);
-  const exceptionIds=useMemo(()=>new Set(allItems.filter(item=>parseRate(rates[item.id]??"")===null||sourceMismatch(item)).map(item=>item.id)),[allItems,rates]);
 
   function changeRate(id:string,value:string){setRates(current=>({...current,[id]:value}));setRateSources(current=>({...current,[id]:"manual"}));}
 
@@ -76,32 +75,34 @@ export default function UploadBoq(){
 
   return <SafeAreaView style={s.safe} edges={["top"]}><ScrollView contentContainerStyle={s.page} keyboardShouldPersistTaps="handled">
     <View style={s.hero}><Pressable onPress={()=>router.back()}><Text style={s.back}>← {projectId?"Project":"Estimate"}</Text></Pressable><Text style={s.eye}>UPLOAD BOQ</Text><Text style={s.title}>Keep the bill. Check the exceptions.</Text><Text style={s.sub}>Charismak preserves the source sections, descriptions, quantities, rates and amounts first. Classification, materials and procurement are separate later steps.</Text></View>
-
     <Pressable style={s.drop} onPress={choose}><Text style={s.plus}>＋</Text><Text style={s.dropTitle}>{file?file.name:"Choose Excel BOQ"}</Text><Text style={s.dropCopy}>XLSX · XLS · CSV · up to 12 MB</Text></Pressable>
     <Pressable disabled={!file||busy} onPress={parse} style={[s.primary,(!file||busy)&&s.disabled]}><Text style={s.primaryText}>{busy?"Reading BOQ…":"Read BOQ"}</Text></Pressable>
     {!!message&&<View style={s.message}><Text style={s.messageText}>{message}</Text></View>}
 
     {result?.boq&&<>
-      <View style={s.summary}><Text style={s.summaryEye}>SOURCE BOQ</Text><Text style={s.summaryTitle}>{result.boq.name}</Text><View style={s.metrics}><Metric label="Sections" value={String(result.boq.sections.length)}/><Metric label="Items" value={String(total)}/><Metric label="Unpriced" value={String(unpriced)} warn={unpriced>0}/><Metric label="Source mismatches" value={String(mismatches)} warn={mismatches>0}/></View><View style={s.totalRow}><View><Text style={s.totalLabel}>SOURCE PRICED TOTAL</Text><Text style={s.totalValue}>{money(sourcePricedTotal)}</Text></View><View style={{alignItems:"flex-end"}}><Text style={s.totalLabel}>WORKING TOTAL</Text><Text style={s.totalValue}>{money(workingTotal)}</Text></View></View></View>
-
+      <View style={s.summary}><Text style={s.summaryEye}>SOURCE BOQ</Text><Text style={s.summaryTitle}>{result.boq.name}</Text><View style={s.metrics}><Metric label="Sections" value={String(result.boq.sections.length)}/><Metric label="Items" value={String(allItems.length)}/><Metric label="Unpriced" value={String(unpriced)} warn={unpriced>0}/><Metric label="Source mismatches" value={String(mismatches)} warn={mismatches>0}/></View><View style={s.totalRow}><View><Text style={s.totalLabel}>SOURCE PRICED TOTAL</Text><Text style={s.totalValue}>{money(sourcePricedTotal)}</Text></View><View style={{alignItems:"flex-end"}}><Text style={s.totalLabel}>WORKING TOTAL</Text><Text style={s.totalValue}>{money(workingTotal)}</Text></View></View></View>
       <View style={s.rule}><Text style={s.ruleTitle}>Nothing here blocks import.</Text><Text style={s.ruleCopy}>{unpriced?`${unpriced} unpriced line${unpriced===1?" is":"s are"} kept exactly as unpriced. `:""}{mismatches?`${mismatches} source arithmetic mismatch${mismatches===1?" is":"es are"} flagged. `:""}You can continue now and review any of these later.</Text></View>
-
       <Pressable disabled={continuing} onPress={continueWithBoq} style={[s.continue,continuing&&s.disabled]}><View style={{flex:1}}><Text style={s.continueEye}>CONTINUE</Text><Text style={s.continueTitle}>{projectId?"Attach reviewed BOQ to this project":"Continue with this BOQ"}</Text><Text style={s.continueCopy}>No Money transaction, budget or procurement order will be created.</Text></View><Text style={s.arrow}>{continuing?"…":"›"}</Text></Pressable>
-
       <View style={s.reviewHead}><View style={{flex:1}}><Text style={s.reviewTitle}>Review only when needed</Text><Text style={s.reviewCopy}>{exceptionIds.size?`${exceptionIds.size} item${exceptionIds.size===1?" has":"s have"} a pricing/arithmetic exception.`:"No pricing/arithmetic exceptions detected."}</Text></View><Pressable onPress={()=>setShowAll(v=>!v)} style={s.outline}><Text style={s.outlineText}>{showAll?"Exceptions only":"Show all items"}</Text></Pressable></View>
-
-      {result.boq.sections.map(section=>{
-        const exceptions=section.items.filter(item=>exceptionIds.has(item.id));
-        const visible=showAll?section.items:exceptions;
-        return <View key={section.id} style={s.section}>
-          <Pressable style={s.sectionHead} onPress={()=>setOpen(current=>({...current,[section.id]:!current[section.id]}))}><View style={{flex:1}}><Text style={s.sectionCode}>{section.code||"SECTION"}</Text><Text style={s.sectionTitle}>{section.title}</Text><Text style={s.sectionMeta}>{section.items.length} item{section.items.length===1?"":"s"}{exceptions.length?` · ${exceptions.length} exception${exceptions.length===1?"":"s"}`:" · clear"}</Text></View><Text style={s.chev}>{open[section.id]?"⌃":"⌄"}</Text></Pressable>
-          {open[section.id]&&(!visible.length?<View style={s.clearBox}><Text style={s.clearText}>No pricing or arithmetic exception in this section.</Text></View>:visible.map(item=>{const rate=parseRate(rates[item.id]??"");const mismatch=sourceMismatch(item);return <View key={item.id} style={s.item}><View style={s.itemTop}><Text style={s.itemNo}>{item.itemNo||"—"}</Text><Text style={s.itemDesc}>{item.description}</Text></View><View style={s.itemFacts}><Text style={s.fact}>{qty(item.quantity)} {item.unit}</Text><Text style={s.fact}>Source rate {money(item.rate)}</Text><Text style={[s.fact,mismatch&&s.warnText]}>Source amount {money(item.amount)}</Text></View><View style={s.rateBox}><View style={{flex:1}}><Text style={s.label}>WORKING RATE</Text><TextInput value={rates[item.id]??""} onChangeText={value=>changeRate(item.id,value)} keyboardType="decimal-pad" placeholder="Leave blank if genuinely unpriced" style={s.rateInput}/></View><View style={s.working}><Text style={s.label}>WORKING AMOUNT</Text><Text style={s.workingValue}>{money(rate==null?null:item.quantity*rate)}</Text></View></View>{mismatch&&<Text style={s.warning}>Source amount does not equal Quantity × source Rate. The source values remain preserved.</Text>}</View>;})}
-        </View>;
-      })}
-
+      {result.boq.sections.map(section=><SectionBlock key={section.id} section={section} isOpen={Boolean(open[section.id])} showAll={showAll} exceptionIds={exceptionIds} rates={rates} onToggle={()=>setOpen(current=>({...current,[section.id]:!current[section.id]}))} onRateChange={changeRate}/>) }
       {!!result.warnings.length&&<View style={s.notes}><Text style={s.notesTitle}>{result.warnings.length} parser note{result.warnings.length===1?"":"s"}</Text><Text style={s.notesCopy}>Parser notes are retained for transparency; they do not automatically change the BOQ.</Text>{result.warnings.slice(0,12).map((warning,index)=><Text key={`${warning.sheet}-${warning.row}-${index}`} style={s.noteLine}>{warning.sheet}{warning.row?` row ${warning.row}`:""}: {warning.message}</Text>)}</View>}
     </>}
   </ScrollView></SafeAreaView>;
+}
+
+function SectionBlock({section,isOpen,showAll,exceptionIds,rates,onToggle,onRateChange}:{section:LocalBoqSection;isOpen:boolean;showAll:boolean;exceptionIds:Set<string>;rates:Record<string,string>;onToggle:()=>void;onRateChange:(id:string,value:string)=>void}){
+  const exceptions=section.items.filter(item=>exceptionIds.has(item.id));
+  const visible=showAll?section.items:exceptions;
+  return <View style={s.section}>
+    <Pressable style={s.sectionHead} onPress={onToggle}><View style={{flex:1}}><Text style={s.sectionCode}>{section.code||"SECTION"}</Text><Text style={s.sectionTitle}>{section.title}</Text><Text style={s.sectionMeta}>{section.items.length} item{section.items.length===1?"":"s"}{exceptions.length?` · ${exceptions.length} exception${exceptions.length===1?"":"s"}`:" · clear"}</Text></View><Text style={s.chev}>{isOpen?"⌃":"⌄"}</Text></Pressable>
+    {isOpen&&visible.length===0&&<View style={s.clearBox}><Text style={s.clearText}>No pricing or arithmetic exception in this section.</Text></View>}
+    {isOpen&&visible.map(item=><ItemRow key={item.id} item={item} rateText={rates[item.id]??""} onRateChange={value=>onRateChange(item.id,value)}/>)}
+  </View>;
+}
+
+function ItemRow({item,rateText,onRateChange}:{item:LocalBoqItem;rateText:string;onRateChange:(value:string)=>void}){
+  const rate=parseRate(rateText);const mismatch=sourceMismatch(item);
+  return <View style={s.item}><View style={s.itemTop}><Text style={s.itemNo}>{item.itemNo||"—"}</Text><Text style={s.itemDesc}>{item.description}</Text></View><View style={s.itemFacts}><Text style={s.fact}>{qty(item.quantity)} {item.unit}</Text><Text style={s.fact}>Source rate {money(item.rate)}</Text><Text style={[s.fact,mismatch&&s.warnText]}>Source amount {money(item.amount)}</Text></View><View style={s.rateBox}><View style={{flex:1}}><Text style={s.label}>WORKING RATE</Text><TextInput value={rateText} onChangeText={onRateChange} keyboardType="decimal-pad" placeholder="Leave blank if genuinely unpriced" style={s.rateInput}/></View><View style={s.working}><Text style={s.label}>WORKING AMOUNT</Text><Text style={s.workingValue}>{money(rate==null?null:item.quantity*rate)}</Text></View></View>{mismatch&&<Text style={s.warning}>Source amount does not equal Quantity × source Rate. The source values remain preserved.</Text>}</View>;
 }
 
 function Metric({label,value,warn}:{label:string;value:string;warn?:boolean}){return <View style={s.metric}><Text style={s.metricLabel}>{label}</Text><Text style={[s.metricValue,warn&&s.metricWarn]}>{value}</Text></View>}
