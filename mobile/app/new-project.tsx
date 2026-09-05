@@ -6,30 +6,27 @@ import { supabase } from "../lib/supabase";
 import { loadWorkspace } from "../lib/workspace";
 import { baseStyles as b, Card, ScreenTitle } from "../components/ui";
 
-const num=(v:string)=>{const n=Number(v.replace(/[,₦\s]/g,""));return Number.isFinite(n)&&v.trim()!==""&&n>=0?n:null;};
-const clean=(v:string)=>v.trim();
-const unique=(values:string[])=>Array.from(new Set(values.map(value=>value.trim()).filter(Boolean)));
+const uniqueKeywords=(values:string[])=>Array.from(new Set(values.map(v=>v.trim()).filter(Boolean)));
 
 export default function NewProject(){
-  const [code,setCode]=useState("");
   const [name,setName]=useState("");
-  const [client,setClient]=useState("");
   const [location,setLocation]=useState("");
-  const [type,setType]=useState("");
-  const [contract,setContract]=useState("");
-  const [aliases,setAliases]=useState("");
+  const [code,setCode]=useState("");
+  const [client,setClient]=useState("");
   const [busy,setBusy]=useState(false);
 
   async function create(){
-    if(name.trim().length<2)return Alert.alert("Project name required","Enter the project name.");
-    if(location.trim().length<2)return Alert.alert("Project location required","Enter the project location so records can be identified correctly.");
+    if(!name.trim()||!location.trim())return Alert.alert("Project details","Project name and location are required.");
     setBusy(true);
     try{
       const w=await loadWorkspace();
-      if(!w.membership.is_owner)throw new Error("Only the MD / Owner can create a project in this build.");
-      const projectName=clean(name);const projectCode=clean(code).toUpperCase()||null;const clientName=clean(client)||null;const projectLocation=clean(location);const projectType=clean(type)||null;const contractValue=num(contract);
-      const importKeywords=unique([projectName,projectCode??"",clientName??"",projectLocation,...aliases.split(",")]);
-      const {data,error}=await supabase.from("projects").insert({
+      const role=String(w.membership.role||"").toLowerCase();
+      if(role!=="md"&&role!=="owner")throw new Error("Only the MD can create a live project right now.");
+      const projectName=name.trim();
+      const projectCode=code.trim().toUpperCase()||null;
+      const clientName=client.trim()||null;
+      const projectLocation=location.trim();
+      const {data:p,error}=await supabase.from("projects").insert({
         company_id:w.membership.company_id,
         project_code:projectCode,
         name:projectName,
@@ -38,32 +35,31 @@ export default function NewProject(){
         reported_progress:0,
         created_by:w.user.id,
         client_name:clientName,
-        import_keywords:importKeywords,
-        project_type:projectType,
-        contract_value:contractValue,
+        import_keywords:uniqueKeywords([projectName,projectCode||"",clientName||"",projectLocation])
       }).select("id").single();
       if(error)throw error;
-      router.replace({pathname:"/project/[id]",params:{id:data.id}});
+      router.replace({pathname:"/project/[id]",params:{id:p.id}});
     }catch(e){Alert.alert("Could not create project",e instanceof Error?e.message:"Please try again.");}
     finally{setBusy(false);}
   }
 
   return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content} keyboardShouldPersistTaps="handled">
-    <ScreenTitle eyebrow="NEW PROJECT" title="Start clean" subtitle="Create the project first. Then upload its BOQ and let Charismak review only the exceptions that need you."/>
+    <ScreenTitle eyebrow="NEW PROJECT" title="Start with the job" subtitle="Only enter what identifies the project. BOQ, contract value, budget and money records come later when their source is available."/>
     <Card style={s.form}>
-      <Field label="Project name *" value={name} onChange={setName} placeholder="e.g. Two Bedroom Apartment"/>
-      <Field label="Location *" value={location} onChange={setLocation} placeholder="e.g. Jahi, Abuja"/>
-      <Field label="Project code" value={code} onChange={setCode} placeholder="Optional · e.g. JAHI-01"/>
-      <Field label="Client / managed company" value={client} onChange={setClient} placeholder="Optional"/>
-      <Field label="Project type" value={type} onChange={setType} placeholder="Residential, fit-out, civil…"/>
-      <Field label="Contract / client value" value={contract} onChange={setContract} placeholder="Optional" keyboard="numeric"/>
-      <Field label="Import keywords" value={aliases} onChange={setAliases} placeholder="Optional extra names, separated by commas"/>
-      <View style={s.nextBox}><Text style={s.nextTitle}>After creation</Text><Text style={s.nextCopy}>Open the project and tap “Upload BOQ”. The project itself does not depend on any future clients/budget tables.</Text></View>
-      <Pressable disabled={busy} onPress={create} style={[s.button,busy&&{opacity:.55}]}><Text style={s.buttonText}>{busy?"Creating project…":"Create project"}</Text></Pressable>
+      <Field label="Project name" value={name} onChange={setName} placeholder="e.g. Jahi Residence" required/>
+      <Field label="Location" value={location} onChange={setLocation} placeholder="e.g. Jahi, Abuja" required/>
+      <Field label="Project code" value={code} onChange={setCode} placeholder="Optional, e.g. JAHI-01" caps/>
+      <Field label="Client" value={client} onChange={setClient} placeholder="Optional"/>
+      <View style={s.note}><Text style={s.noteTitle}>That is enough to start.</Text><Text style={s.noteCopy}>After creation, open the project and upload its BOQ. Charismak will keep the source bill separate from Money and from later procurement decisions.</Text></View>
+      <Pressable disabled={busy} onPress={create} style={[s.button,busy&&s.disabled]}><Text style={s.buttonText}>{busy?"Creating…":"Create project"}</Text></Pressable>
     </Card>
   </ScrollView></SafeAreaView>;
 }
 
-function Field({label,value,onChange,placeholder,keyboard}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;keyboard?:"numeric"}){return <View style={s.field}><Text style={s.label}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} keyboardType={keyboard} autoCapitalize={label.toLowerCase().includes("code")?"characters":"sentences"} style={s.input}/></View>}
+function Field({label,value,onChange,placeholder,required,caps}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;required?:boolean;caps?:boolean}){
+  return <View style={s.field}><Text style={s.label}>{label}{required?" *":""}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} autoCapitalize={caps?"characters":"words"} style={s.input}/></View>;
+}
 
-const s=StyleSheet.create({form:{gap:14},field:{gap:6},label:{fontSize:12,fontWeight:"900",color:"#4a6273",fontFamily:"sans-serif"},input:{height:49,borderWidth:1,borderColor:"#d8e3ea",borderRadius:12,paddingHorizontal:12,fontSize:14,color:"#183a52",backgroundColor:"#fff",fontFamily:"sans-serif"},nextBox:{backgroundColor:"#eef5f9",padding:12,borderRadius:11},nextTitle:{fontSize:12,fontWeight:"900",color:"#173f5a",fontFamily:"sans-serif"},nextCopy:{fontSize:11,lineHeight:16,color:"#617786",marginTop:4,fontFamily:"sans-serif"},button:{height:50,borderRadius:14,backgroundColor:"#073f65",alignItems:"center",justifyContent:"center"},buttonText:{fontSize:14,fontWeight:"900",color:"white",fontFamily:"sans-serif"}});
+const s=StyleSheet.create({
+  form:{gap:16},field:{gap:7},label:{fontSize:13,fontWeight:"800",color:"#3e5a6d",fontFamily:"sans-serif"},input:{minHeight:54,borderWidth:1,borderColor:"#cfdae2",borderRadius:14,paddingHorizontal:14,fontSize:16,color:"#173f5a",backgroundColor:"#fff",fontFamily:"sans-serif"},note:{backgroundColor:"#f1f7fa",borderRadius:14,padding:14},noteTitle:{fontSize:14,fontWeight:"900",color:"#173f5a",fontFamily:"sans-serif"},noteCopy:{fontSize:13,lineHeight:20,color:"#627987",marginTop:4,fontFamily:"sans-serif"},button:{height:54,borderRadius:14,backgroundColor:"#073f65",alignItems:"center",justifyContent:"center"},buttonText:{fontSize:15,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"},disabled:{opacity:.5}
+});
