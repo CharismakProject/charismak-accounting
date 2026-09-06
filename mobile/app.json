@@ -3,14 +3,14 @@
     "name": "Charismak Accounting",
     "slug": "charismak-accounting",
     "scheme": "charismak",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "icon": "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "plugins": ["expo-router", "expo-document-picker"],
     "android": {
       "package": "com.charismakproject.app",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "https://raw.githubusercontent.com/CharismakProject/charismak-website/main/public/branding/charismak-logo.png",
         "backgroundColor": "#ffffff"
@@ -18,7 +18,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.charismakproject.app",
-      "buildNumber": "7"
+      "buildNumber": "8"
     },
     "extra": { "router": { "origin": false } }
   }
