@@ -54,11 +54,14 @@ test("native MD route alone can load financial impact and review the field submi
   assert.match(source,/Decline/);
 });
 
-test("stable native Project workspace does not advertise gated field-progress controls",()=>{
+test("stable native Project workspace is accounting-only and does not advertise gated field-progress controls",()=>{
   const project=readFileSync(new URL("../mobile/app/project/[id].tsx",import.meta.url),"utf8");
   assert.doesNotMatch(project,/project-field-progress/);
   assert.doesNotMatch(project,/Field Report/);
   assert.doesNotMatch(project,/project-field-review/);
   assert.doesNotMatch(project,/MD Field Review/);
-  assert.match(project,/Upload BOQ/);
+  assert.doesNotMatch(project,/Upload BOQ/);
+  assert.match(project,/Money in/);
+  assert.match(project,/Money out/);
+  assert.match(project,/Cash position is not profit/);
 });
