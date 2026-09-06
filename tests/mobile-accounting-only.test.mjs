@@ -12,6 +12,7 @@ const project=read("mobile/app/project/[id].tsx");
 const reports=read("mobile/app/(tabs)/reports.tsx");
 const account=read("mobile/app/new-account.tsx");
 const transaction=read("mobile/app/new-transaction.tsx");
+const statement=read("mobile/app/import-statement.tsx");
 const appJson=JSON.parse(read("mobile/app.json"));
 
 test("accounting-only Android navigation removes Estimate from primary product",()=>{
@@ -29,13 +30,21 @@ test("mobile money posting uses the atomic accounting RPC instead of direct tran
   for(const kind of ["project_funding","company_project_funding","company_income","company_financing","project_expense","project_advance","reimbursement","company_expense"]) assert.match(transaction,new RegExp(kind));
 });
 
-test("account setup keeps opening balance separate from income",()=>{
+test("account setup matches the live simple account schema",()=>{
   assert.match(account,/financial_accounts/);
-  assert.match(account,/Opening balance is not income/);
-  assert.match(account,/bank/);
-  assert.match(account,/fintech_wallet/);
-  assert.match(account,/cash/);
-  assert.match(account,/site_imprest/);
+  assert.match(account,/name:name\.trim\(\)/);
+  assert.match(account,/account_type:type/);
+  assert.match(account,/currency_code:\"NGN\"/);
+  for(const type of ["bank","wallet","cash"]) assert.match(account,new RegExp(`\\[\\\"${type}\\\"`));
+  assert.doesNotMatch(account,/institution_name|account_name|account_number_masked|current_balance|fintech_wallet|petty_cash|site_imprest/);
+});
+
+test("money forms read ledger-derived account balances and no legacy account columns",()=>{
+  assert.match(transaction,/account_recorded_balances/);
+  assert.match(transaction,/account_id,name,recorded_balance,account_type,currency_code/);
+  assert.doesNotMatch(transaction,/institution_name|account_name|account_number_masked|current_balance/);
+  assert.match(statement,/financial_accounts/);
+  assert.doesNotMatch(statement,/institution_name|account_name|account_number_masked|current_balance/);
 });
 
 test("construction accounting surfaces separate cash position from profit",()=>{
@@ -54,9 +63,9 @@ test("reports read posted ledger statements and open receivables/payables",()=>{
   assert.match(reports,/project_financial_positions/);
 });
 
-test("internal APK is versioned as Charismak Accounting 0.2.2",()=>{
+test("internal APK is versioned as Charismak Accounting 0.2.3",()=>{
   assert.equal(appJson.expo.name,"Charismak Accounting");
-  assert.equal(appJson.expo.version,"0.2.2");
-  assert.equal(appJson.expo.android.versionCode,7);
+  assert.equal(appJson.expo.version,"0.2.3");
+  assert.equal(appJson.expo.android.versionCode,8);
   assert.equal(appJson.expo.android.package,"com.charismakproject.app");
 });
