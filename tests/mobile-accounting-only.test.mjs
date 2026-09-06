@@ -54,9 +54,9 @@ test("reports read posted ledger statements and open receivables/payables",()=>{
   assert.match(reports,/project_financial_positions/);
 });
 
-test("internal APK is versioned as Charismak Accounting 0.2.0",()=>{
+test("internal APK is versioned as Charismak Accounting 0.2.1",()=>{
   assert.equal(appJson.expo.name,"Charismak Accounting");
-  assert.equal(appJson.expo.version,"0.2.0");
-  assert.equal(appJson.expo.android.versionCode,5);
+  assert.equal(appJson.expo.version,"0.2.1");
+  assert.equal(appJson.expo.android.versionCode,6);
   assert.equal(appJson.expo.android.package,"com.charismakproject.app");
 });
