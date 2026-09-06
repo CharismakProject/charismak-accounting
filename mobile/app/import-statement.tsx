@@ -93,7 +93,7 @@ export default function ImportStatement(){
       });
       setProgress(existing?"Opening saved analysis…":"Saving statement source…");
       const savedResult=existing??await saveStatementImport({companyId:workspace.membership.company_id,userId:workspace.user.id,sourceAccount,fileName:asset.name,fileBytes:bytes,rows});
-      setFileName(asset.name);setAnalysis(result);setSaved({importId:savedResult.importId,idByIndex:savedResult.idByIndex});
+      setFileName(asset.name);setAnalysis(result);setSaved({importId:String(savedResult.importId),idByIndex:savedResult.idByIndex});
       setProgress("");
     }catch(e){setProgress("");Alert.alert("Could not analyse statement",readableError(e,"Check the statement format and try again."));}
     finally{setBusy(false);}
