@@ -26,7 +26,8 @@ const projects=[
 ];
 
 test("standard statement requires one fixed set of columns",()=>{
-  const bad=XLSX.utils.book_new();XLSX.utils.book_append_sheet(bad,XLSX.utils.aoa_to_sheet([["Date","Narration","Amount"]]),"Statement");
+  const bad=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(bad,XLSX.utils.aoa_to_sheet([["Date","Narration","Amount"],["01/09/2026","Example",250000]]),"Statement");
   const bytes=asArrayBuffer(XLSX.write(bad,{type:"array",bookType:"xlsx"}));
   assert.throws(()=>parseStandardStatement(bytes),/Charismak statement format/i);
 });
