@@ -4,62 +4,16 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../lib/supabase";
 import { loadWorkspace } from "../lib/workspace";
-import { baseStyles as b, Card, ScreenTitle } from "../components/ui";
-
+import { baseStyles as b, Card, ScreenTitle, palette } from "../components/ui";
+import { readableError } from "../lib/mobile-error";
 const uniqueKeywords=(values:string[])=>Array.from(new Set(values.map(v=>v.trim()).filter(Boolean)));
-
 export default function NewProject(){
-  const [name,setName]=useState("");
-  const [location,setLocation]=useState("");
-  const [code,setCode]=useState("");
-  const [client,setClient]=useState("");
-  const [busy,setBusy]=useState(false);
-
+  const[name,setName]=useState(""),[location,setLocation]=useState(""),[code,setCode]=useState(""),[client,setClient]=useState(""),[contract,setContract]=useState(""),[busy,setBusy]=useState(false);
   async function create(){
     if(!name.trim()||!location.trim())return Alert.alert("Project details","Project name and location are required.");
-    setBusy(true);
-    try{
-      const w=await loadWorkspace();
-      const role=String(w.membership.role||"").toLowerCase();
-      if(role!=="md"&&role!=="owner")throw new Error("Only the MD can create a live project right now.");
-      const projectName=name.trim();
-      const projectCode=code.trim().toUpperCase()||null;
-      const clientName=client.trim()||null;
-      const projectLocation=location.trim();
-      const {data:p,error}=await supabase.from("projects").insert({
-        company_id:w.membership.company_id,
-        project_code:projectCode,
-        name:projectName,
-        location:projectLocation,
-        status:"active",
-        reported_progress:0,
-        created_by:w.user.id,
-        client_name:clientName,
-        import_keywords:uniqueKeywords([projectName,projectCode||"",clientName||""])
-      }).select("id").single();
-      if(error)throw error;
-      router.replace({pathname:"/project/[id]",params:{id:p.id}});
-    }catch(e){Alert.alert("Could not create project",e instanceof Error?e.message:"Please try again.");}
-    finally{setBusy(false);}
+    const contractValue=contract.trim()?Number(contract.replace(/,/g,"")):null;if(contractValue!==null&&(!Number.isFinite(contractValue)||contractValue<0))return Alert.alert("Contract value","Enter a valid amount or leave it blank.");
+    setBusy(true);try{const w=await loadWorkspace();const role=String(w.membership.role||"").toLowerCase();if(role!=="md"&&role!=="owner")throw new Error("Only the MD can create a live project right now.");const projectName=name.trim(),projectCode=code.trim().toUpperCase()||null,clientName=client.trim()||null,projectLocation=location.trim();const{data:p,error}=await supabase.from("projects").insert({company_id:w.membership.company_id,project_code:projectCode,name:projectName,location:projectLocation,status:"active",reported_progress:0,contract_value:contractValue,created_by:w.user.id,client_name:clientName,import_keywords:uniqueKeywords([projectName,projectCode||"",clientName||""])}).select("id").single();if(error)throw error;router.replace({pathname:"/project/[id]",params:{id:p.id}})}catch(e){Alert.alert("Could not create project",readableError(e))}finally{setBusy(false)}
   }
-
-  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content} keyboardShouldPersistTaps="handled">
-    <ScreenTitle eyebrow="NEW PROJECT" title="Start with the job" subtitle="Only enter what identifies the project. BOQ, contract value, budget and money records come later when their source is available."/>
-    <Card style={s.form}>
-      <Field label="Project name" value={name} onChange={setName} placeholder="e.g. Jahi Residence" required/>
-      <Field label="Location" value={location} onChange={setLocation} placeholder="e.g. Jahi, Abuja" required/>
-      <Field label="Project code" value={code} onChange={setCode} placeholder="Optional, e.g. JAHI-01" caps/>
-      <Field label="Client" value={client} onChange={setClient} placeholder="Optional"/>
-      <View style={s.note}><Text style={s.noteTitle}>That is enough to start.</Text><Text style={s.noteCopy}>After creation, open the project and upload its BOQ. Charismak will keep the source bill separate from Money and from later procurement decisions.</Text></View>
-      <Pressable disabled={busy} onPress={create} style={[s.button,busy&&s.disabled]}><Text style={s.buttonText}>{busy?"Creating…":"Create project"}</Text></Pressable>
-    </Card>
-  </ScrollView></SafeAreaView>;
-}
-
-function Field({label,value,onChange,placeholder,required,caps}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;required?:boolean;caps?:boolean}){
-  return <View style={s.field}><Text style={s.label}>{label}{required?" *":""}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} autoCapitalize={caps?"characters":"words"} style={s.input}/></View>;
-}
-
-const s=StyleSheet.create({
-  form:{gap:16},field:{gap:7},label:{fontSize:13,fontWeight:"800",color:"#3e5a6d",fontFamily:"sans-serif"},input:{minHeight:54,borderWidth:1,borderColor:"#cfdae2",borderRadius:14,paddingHorizontal:14,fontSize:16,color:"#173f5a",backgroundColor:"#fff",fontFamily:"sans-serif"},note:{backgroundColor:"#f1f7fa",borderRadius:14,padding:14},noteTitle:{fontSize:14,fontWeight:"900",color:"#173f5a",fontFamily:"sans-serif"},noteCopy:{fontSize:13,lineHeight:20,color:"#627987",marginTop:4,fontFamily:"sans-serif"},button:{height:54,borderRadius:14,backgroundColor:"#073f65",alignItems:"center",justifyContent:"center"},buttonText:{fontSize:15,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"},disabled:{opacity:.5}
-});
+  return <SafeAreaView style={b.screen} edges={["top"]}><ScrollView contentContainerStyle={b.content} keyboardShouldPersistTaps="handled"><Pressable onPress={()=>router.back()}><Text style={s.back}>← Back</Text></Pressable><ScreenTitle eyebrow="NEW PROJECT" title="Create the job" subtitle="Start with the facts needed for job-cost accounting. You can leave contract value blank until it is known."/><Card style={s.form}><Field label="Project name" value={name} onChange={setName} placeholder="e.g. Jahi Residence"/><Field label="Location" value={location} onChange={setLocation} placeholder="e.g. Jahi, Abuja"/><Field label="Project code (optional)" value={code} onChange={setCode} placeholder="e.g. JAHI-01" caps/><Field label="Client (optional)" value={client} onChange={setClient} placeholder="Client or employer"/><Field label="Contract value (optional)" value={contract} onChange={setContract} placeholder="0" keyboard="decimal-pad"/><View style={s.note}><Text style={s.noteTitle}>Do not invent a contract value.</Text><Text style={s.noteCopy}>If it is not confirmed yet, leave it blank. Money received and money spent can still be recorded accurately.</Text></View><Pressable disabled={busy} onPress={create} style={[s.button,busy&&{opacity:.5}]}><Text style={s.buttonText}>{busy?"Creating…":"Create project"}</Text></Pressable></Card></ScrollView></SafeAreaView>}
+function Field({label,value,onChange,placeholder,caps,keyboard="default"}:{label:string;value:string;onChange:(v:string)=>void;placeholder:string;caps?:boolean;keyboard?:"default"|"decimal-pad"}){return <View style={s.field}><Text style={s.label}>{label}</Text><TextInput value={value} onChangeText={onChange} placeholder={placeholder} autoCapitalize={caps?"characters":"words"} keyboardType={keyboard} style={s.input}/></View>}
+const s=StyleSheet.create({back:{fontSize:15,fontWeight:"800",color:palette.navy,fontFamily:"sans-serif"},form:{gap:15},field:{gap:7},label:{fontSize:14,fontWeight:"800",color:"#3e5a6d",fontFamily:"sans-serif"},input:{minHeight:56,borderWidth:1,borderColor:"#cfdae2",borderRadius:14,paddingHorizontal:14,fontSize:17,color:palette.ink,backgroundColor:"#fff",fontFamily:"sans-serif"},note:{backgroundColor:"#f1f7fa",borderRadius:14,padding:14},noteTitle:{fontSize:15,fontWeight:"900",color:palette.ink,fontFamily:"sans-serif"},noteCopy:{fontSize:13,lineHeight:20,color:palette.muted,marginTop:4,fontFamily:"sans-serif"},button:{minHeight:56,borderRadius:14,backgroundColor:palette.navy,alignItems:"center",justifyContent:"center"},buttonText:{fontSize:16,fontWeight:"900",color:"#fff",fontFamily:"sans-serif"}});
