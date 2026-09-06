@@ -3,11 +3,16 @@ import test from "node:test";
 import * as XLSX from "xlsx";
 import { analyseStatement, parseStandardStatement } from "../lib/statement-import.ts";
 
+function asArrayBuffer(bytes){
+  if(bytes instanceof ArrayBuffer)return bytes;
+  if(ArrayBuffer.isView(bytes))return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
+  throw new TypeError("Expected workbook bytes");
+}
+
 function workbook(rows){
   const ws=XLSX.utils.aoa_to_sheet([["Date","Value Date","Description","Debit","Credit","Balance","Reference"],...rows]);
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Statement");
-  const bytes=XLSX.write(wb,{type:"array",bookType:"xlsx"});
-  return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
+  return asArrayBuffer(XLSX.write(wb,{type:"array",bookType:"xlsx"}));
 }
 
 const accounts=[
@@ -22,8 +27,8 @@ const projects=[
 
 test("standard statement requires one fixed set of columns",()=>{
   const bad=XLSX.utils.book_new();XLSX.utils.book_append_sheet(bad,XLSX.utils.aoa_to_sheet([["Date","Narration","Amount"]]),"Statement");
-  const bytes=XLSX.write(bad,{type:"array",bookType:"xlsx"});
-  assert.throws(()=>parseStandardStatement(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)),/Charismak statement format/i);
+  const bytes=asArrayBuffer(XLSX.write(bad,{type:"array",bookType:"xlsx"}));
+  assert.throws(()=>parseStandardStatement(bytes),/Charismak statement format/i);
 });
 
 test("project keyword plus construction wording becomes a strong project cost",()=>{
